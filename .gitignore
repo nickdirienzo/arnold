@@ -6,3 +6,5 @@ config/local*.json
 !.env.example
 *.log
 .DS_Store
+/bin/
+/dist/

@@ -1,87 +1,101 @@
 # Arnold
 
-Arnold is a local Slack adapter for Paddock, named after Jurassic Park's chief engineer Ray Arnold. It is an independent Node.js project with no organization-specific dependencies. Slack threads identify conversations; Paddock owns tasks, native agent history, identities, worktrees and execution. Arnold never invokes a model or executes model-selected commands on its host.
+Arnold is a Slack-native engineering assistant, named after Jurassic Park's chief engineer Ray Arnold. It runs as a single Go binary on a local orchestration host and delegates engineering work to Paddock/OpenShell.
 
-Arnold supports Claude and Codex through Paddock, allowlisted automatic triggers, multi-participant thread continuation, expandable assistant progress, final replies and 👀 acknowledgements. Local SQLite stores routing and delivery metadata so conversations can recover after a restart. See [output delivery](docs/paddock-output.md) and [validation](docs/validation.md) for behavior, test coverage and deployment checks.
+A mention starts a conversation in a Slack thread. Later messages continue it without another mention. Arnold maps authenticated Slack users to configured Paddock identities, forwards work through the public CLI, and relays public progress and answers using Slack's expandable assistant thinking block. It adds 👀 while a request is awaiting its response.
 
-## Run locally
+Paddock owns durable tasks, native agent conversations, identities, worktrees and execution. OpenShell provides isolation. Rex provides independent interactive terminal access. Arnold performs deterministic Slack communication and coordination; it runs no model or agent SDK on its host.
 
-Requires Node.js 24+ and a Paddock build supporting named GitHub App identities, OpenShell and `output TASK_ID --after CURSOR --limit 20 --json`. Verify that your installed Paddock CLI provides these interfaces. Every dispatch explicitly requests OpenShell. A missing sandbox or credential fails through Paddock with no host fallback.
+## Build or install
+
+Development requires Go 1.27.2 or newer:
 
 ```sh
-npm ci
+go install github.com/nickdirienzo/arnold/cmd/arnold@latest
+```
+
+Or build from a checkout:
+
+```sh
+make build
+./bin/arnold version
+```
+
+`make build` sets `CGO_ENABLED=0` and produces a standalone executable with pure-Go SQLite support. Node.js, npm, a C compiler and a separate database service are not needed at runtime. Paddock and its configured OpenShell runtime must be installed separately.
+
+## Configure
+
+```sh
 cp config/example.json config/local.json
 cp .env.example .env
 chmod 600 .env config/local.json
 ```
 
-Edit local configuration with the Slack workspace ID, allowed channel IDs, registered Paddock repository aliases (or absolute paths), Slack user IDs and their named Paddock identities. Set absolute executable and state paths in `.env`. Arnold does not create or change Paddock identity credentials. Have the operator verify each named App identity against the configured repository using Paddock's identity commands.
+Set the workspace ID, allowed channels, repository aliases/paths, Slack user IDs and named Paddock identities in the local configuration. Set tokens and optional absolute paths in `.env`. Existing process environment variables take precedence over `.env` values.
 
-Set the top-level `agent` to `claude` or `codex`; the example uses Claude. Configurations that omit it retain the earlier Codex default. Paddock owns the corresponding OpenShell model provider; Arnold runs no agent SDK on the host. Restart Arnold after changing configuration. A thread previously handled by the other agent starts a new Paddock task with the Slack context and predecessor reference, then resumes that new task for follow-ups.
+Create/install the Slack app using `slack-app-manifest.json`, enable Socket Mode and create an app-level token with `connections:write`. The bot needs the manifest's scopes, including `reactions:write`. Reinstall the app after adding scopes, update the local bot token if it changes, and invite the bot to allowed channels. Verify it can read thread context using `conversations.replies`.
 
-Create/install a Slack app using `slack-app-manifest.json`, enable Socket Mode and create an app token with `connections:write`. Set `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` locally, then invite Arnold to allowed channels. Thread context uses `conversations.replies`; verify the installed token has access to read threads in those channels. A context-fetch permission error leaves the delivery pending; Arnold does not silently discard the context.
-
-```sh
-npm test
-npm run check
-npm start
-```
-
-To exercise the installed Paddock output command against a disposable test registry, without live agent or Slack calls:
+The top-level `agent` selects `claude` or `codex`; the example uses Claude, and configurations that omit the field retain Codex. Paddock must have the corresponding OpenShell provider configured. Arnold does not create GitHub Apps, retrieve private keys, or configure model credentials.
 
 ```sh
-ARNOLD_PADDOCK_TEST_BIN="$(command -v paddock)" npm test
+arnold run
+# Explicit paths are also supported:
+arnold run --env-file /path/to/.env --config /path/to/config.json --state /path/to/state.sqlite
 ```
 
-Arnold adds 👀 to accepted messages before dispatch and removes it after their response finishes or an actionable rejection is delivered. This requires the `reactions:write` bot scope and reinstalling the Slack app after adding that scope. Failed reactions are retried without blocking work or generating extra channel messages. Reaction metadata survives restarts.
+Use `arnold --help` for options. `ARNOLD_CONFIG`, `ARNOLD_STATE`, `PADDOCK_BIN` and `PADDOCK_HOME` remain supported. Run one Arnold instance for a state database; the process lease rejects a second instance, including an older Node instance.
 
-Only configured channels in the configured workspace can cause dispatch. A human mention starts a conversation. Later human messages in that thread continue without a mention; every participant must have an identity mapping. Incoming `message` and `app_mention` copies deduplicate by workspace/channel/message timestamp. Edits, deletions, unrelated chatter and Arnold's own messages are ignored.
+Only the configured workspace and channels can dispatch work. Every human participant needs an identity mapping. Edits, deletions, unrelated chatter, duplicate event copies and Arnold's own messages are ignored. Unknown users receive an actionable notice. Missing reaction permission is logged and retried without blocking work.
 
-Triggers match a configured channel, exact authenticated bot ID (or human user ID), and a literal text substring. No regexes, model routing or dynamically selected identities are involved. The example is illustrative and authorizes nothing until an operator replaces the IDs. Automation always selects the configured investigation identity. Set `automation.recipientUserId` to a channel member ID to enable the assistant thinking block for bot-initiated conversations; without a human recipient, answers use ordinary Slack replies and diagnostics stay local. Bot messages without an explicit matching trigger cannot initiate or continue work.
+## Conversation and identity behavior
 
-For a human-only setup, set `triggers` to `[]` and omit `automation`. Enabling any trigger requires an explicitly configured automation identity.
+A new task receives the bounded earlier Slack context so an initial reply such as “investigate this” has a referent. **Resumed tasks receive only the new authored message.** Paddock already retains previous user/assistant messages in its native session; Arnold does not resend them or fetch thread history on normal follow-ups.
 
-Human requests use the profile explicitly configured by the operator. Within that profile, the Paddock agent decides whether to investigate, edit, test or prepare a PR. Merging and deployment require human review; Arnold exposes no host tool for those actions. Capabilities and network/database/observability access belong to Paddock/OpenShell configuration.
+Paddock provenance is immutable. Each participant's identity/profile has a task pointer in the thread. Participants can alternate and resume their respective tasks after a restart. When a new participant or a different agent requires a new task, Arnold includes the predecessor reference and Slack context under the current authenticated identity. An automation task is never reassigned to a human identity.
 
-## Identity transitions
+The configured profile determines available capabilities. Human requests can use `investigation` or `implementation`; autonomous work uses `investigation`. Within those permissions, the agent decides what to investigate or change. Merging and deployment require human review. Arnold exposes no privileged host tools for model-directed operations.
 
-Paddock task provenance is immutable. Each participant has a task pointer for their identity and profile in the thread. Follow-ups resume that task through Paddock's native `message` interface, including when participants alternate or Arnold restarts. A participant's first request creates a task under their configured identity and includes the previous participant's task reference and bounded Slack thread context. Arnold retains those references for status reporting. A human following an automated alert uses their own task; Arnold never rewrites the automation task as a human task. Internal agent reasoning remains in Paddock; only publicly shared Slack context transfers across identities.
+## Automatic triggers
 
-## Local state and recovery
+Set `triggers` to `[]` and omit `automation` for a human-only deployment. An automatic trigger requires an explicit channel, exact bot ID or human user ID, a literal text substring, and a designated automation identity. Unlisted bots cannot initiate or continue work.
 
-SQLite holds thread-to-task pointers, transport receipt IDs, temporary pending delivery payloads, output cursors and the latest reported task status. Successful delivery deletes the pending inbound message payload. Outbound agent text is never retained in Arnold's database; only delivery IDs, cursors and Slack stream metadata (timestamps, counters and completion flags) are stored. One exclusive database lease prevents two Arnold processes using the same state. Run one instance and protect its state/configuration as trusted orchestration data.
+An automatic event starts or continues the same conversation path as a human mention. There are no incident objects, remediation workflows or independent task scheduler. Set `automation.recipientUserId` to a channel member ID for assistant thinking blocks in bot-initiated conversations. Without a human recipient, answers use ordinary replies and diagnostics remain local.
 
-Socket Mode envelopes are acknowledged after synchronous durable intake. A service restart resumes pending transport delivery using the same Paddock external ID and byte-identical prompt. The pending prompt is frozen before first dispatch so later Slack messages cannot invalidate Paddock idempotency. A known offline `pending` receipt can retry. Ambiguous `claimed`/`uncertain` messages are surfaced for operator inspection and never automatically replayed. A failed launch with a durable Paddock task is not replaced by a new task ID. Recover it in Paddock.
+## State and recovery
 
-Task status and pending access are polled through `show --json`. Arnold polls `output --limit 20 --json` separately, follows `has_more`, reassembles multipart messages, and posts public progress and answers into the originating Slack thread. Slack's assistant streaming UI groups task IDs, runtime/access status and public progress in an expandable thinking block, using the `plan` display mode. Answer text appears below that block in the same message. `turn_finished` finalizes the stream without posting a separate completion notice, even while the agent process remains running. Newly launching agents wait for their saved native conversation before output is read.
+SQLite stores routing pointers, pending transport payloads, delivery receipts, output cursors, reaction state and stream metadata. Successfully delivered inbound payloads are removed. Outbound agent text is not retained as a second conversation history.
 
-Output cursors advance after successful delivery of complete pages. If a multipart message crosses a page boundary, Arnold holds the cursor until the message is assembled and delivered. Per-message Slack chunk receipts let a restarted service refetch those pages and skip already delivered chunks. The Slack stream timestamp is also persisted so a restart can append to the existing message. Streams rotate before Slack's ten-minute timeout, 12,000-character answer limit or 50-task limit. Expired/mismatched cursors and unavailable history are surfaced without resetting the saved cursor. Process exit alone is reported as stopped, not as evidence of successful work.
+Socket Mode envelopes are acknowledged after durable intake. Pending dispatches use a stable external ID and frozen prompt, preserving Paddock's idempotency across restarts. Confirmed offline messages can retry; ambiguous `claimed`/`uncertain` receipts require inspection and are not replayed automatically. Missing OpenShell access or credentials never cause a host-execution fallback.
 
-Slack failures retry delivery without rerunning tasks. Stable `client_msg_id` values reduce duplicate Slack posts, but a crash between Slack accepting a post and saving its receipt can still duplicate a message. No exactly-once Slack delivery is claimed.
+Output is read through `paddock output --limit 20 --json`. Arnold drains pages, reassembles multipart messages and advances cursors only after delivery. A restart resumes saved Slack streams and skips recorded delivery chunks. It surfaces expired cursors or unavailable history rather than resetting and replaying output. Native `turn_finished` events determine when a response ends, independently of process exit. See [output delivery](docs/paddock-output.md) for limits and delivery guarantees.
 
-Temporary downtime can miss Slack events outside Slack's retry window. Existing accepted conversations/tasks remain recoverable. Arnold does not backfill all channel history or invent a second task queue. Thread context is text-only, capped at four API pages and 24,000 characters, with truncation marked; files and images are not downloaded.
+Temporary downtime can miss Slack events outside Slack's retry window, while accepted conversations remain recoverable. Initial context is text-only, bounded to four API pages and 24,000 UTF-16 code units; truncation is marked. Files and images are not downloaded.
 
 ## launchd
 
-After manual configuration and live validation, render and inspect a LaunchAgent:
+Install the binary, render the LaunchAgent and inspect it before enabling supervision:
 
 ```sh
-mkdir -p state
-node scripts/launchd.js > state/dev.arnold.slack.plist
+mkdir -p ~/.local/bin state
+cp bin/arnold ~/.local/bin/arnold
+arnold launchd --directory "$PWD" --binary "$HOME/.local/bin/arnold" > state/dev.arnold.slack.plist
 plutil -lint state/dev.arnold.slack.plist
 cp state/dev.arnold.slack.plist ~/Library/LaunchAgents/dev.arnold.slack.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.arnold.slack.plist
 ```
 
-Run as the intended trusted service account; Paddock authenticates its local caller using OS identity, while Arnold asserts authenticated Slack requester IDs. The `.env` file supplies tokens without embedding them in the plist. Keep its permissions at 0600. Stop supervision with `launchctl bootout gui/$(id -u)/dev.arnold.slack`. No LaunchAgent is installed automatically. Rotate local logs as appropriate.
+The LaunchAgent runs the binary directly. Tokens remain in the owner-only `.env` file; they are not embedded in the plist. Run it as the intended service account, whose OS identity authenticates Paddock calls. Stop supervision with `launchctl bootout gui/$(id -u)/dev.arnold.slack`. Rotate local logs as appropriate.
 
-## Deployment validation
+## Upgrade from the Node implementation
 
-The automated suite uses real SQLite, injected Slack/Paddock boundaries and an optional installed-CLI contract test with a deterministic agent fixture. It proves transport and output recovery behavior, not a completed live model turn or actual Slack delivery. For a deployment, verify:
+Stop the old service before starting the binary. Keep the same `.env`, `config/local.json` and `state/arnold.sqlite`. The schema and serialized pending-delivery format are compatible, so no export/import is needed. Existing task bindings, output cursors, stream timestamps and reactions continue from the same database. Back up the database and replace the old LaunchAgent with output from `arnold launchd`.
 
-1. Configure real Slack and Paddock identities, repository access and OpenShell capabilities.
-2. Mention Arnold, observe the attributed sandbox task, receive progress and a final answer in the same Slack thread, then follow up without a mention.
-3. Repeat with an allowlisted monitoring bot; verify an unlisted bot cannot dispatch, and a human follow-up uses the human identity while retaining automation provenance.
-4. Restart Arnold during delivery and during task execution; verify recovery without duplicate execution and with response cursors preserved.
+## Validation
 
-No credentials, active monitoring sources, GitHub Apps, or external messages are created by this project.
+```sh
+make test
+make check
+ARNOLD_PADDOCK_TEST_BIN="$(command -v paddock)" go test -race ./...
+```
+
+The suite covers routing/identity policy, minimal follow-ups, retry and restart behavior, Node-generated state compatibility, SQLite single-instance locking, native CLI boundaries, Socket Mode acknowledgements/reconnects, reactions and assistant streams. The optional installed-CLI test uses a disposable registry and deterministic native fixture, with no live model or Slack calls. See [validation](docs/validation.md) for deployment checks and known integration boundaries.
