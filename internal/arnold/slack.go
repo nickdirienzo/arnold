@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -59,12 +60,28 @@ func (s *Slack) API(ctx context.Context, method string, args any, app bool, out 
 	if app {
 		token = s.AppToken
 	}
+	httpMethod, endpoint := http.MethodPost, base+method
+	if method == "conversations.replies" {
+		// This read endpoint accepts query parameters, not a JSON body.
+		var params map[string]any
+		if e = json.Unmarshal(b, &params); e != nil {
+			return e
+		}
+		query := url.Values{}
+		for key, value := range params {
+			query.Set(key, fmt.Sprint(value))
+		}
+		httpMethod, endpoint = http.MethodGet, endpoint+"?"+query.Encode()
+		b = nil
+	}
 	for attempt := 0; attempt < 3; attempt++ {
-		req, e := http.NewRequestWithContext(ctx, "POST", base+method, bytes.NewReader(b))
+		req, e := http.NewRequestWithContext(ctx, httpMethod, endpoint, bytes.NewReader(b))
 		if e != nil {
 			return fmt.Errorf("invalid Slack endpoint")
 		}
-		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+		if httpMethod == http.MethodPost {
+			req.Header.Set("Content-Type", "application/json; charset=utf-8")
+		}
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, e := client.Do(req)
 		if e != nil {
@@ -102,7 +119,7 @@ func (s *Slack) API(ctx context.Context, method string, args any, app bool, out 
 			return fmt.Errorf("invalid Slack %s response", method)
 		}
 		if !result.OK {
-			return SlackError(result.Error)
+			return fmt.Errorf("%s: %w", method, SlackError(result.Error))
 		}
 		if out != nil {
 			return json.Unmarshal(raw, out)

@@ -32,10 +32,21 @@ func newSlackFixture(t *testing.T) *slackFixture {
 	f := &slackFixture{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var args map[string]any
-		if e := json.NewDecoder(r.Body).Decode(&args); e != nil {
+		method := strings.TrimPrefix(r.URL.Path, "/")
+		if method == "conversations.replies" {
+			if r.Method != http.MethodGet || r.ContentLength > 0 {
+				t.Error("thread history must use GET query parameters, without a JSON body")
+			}
+			if r.Header.Get("Authorization") != "Bearer bot-sentinel" || r.URL.Query().Has("token") {
+				t.Error("thread history credentials must stay in the authorization header")
+			}
+			args = map[string]any{}
+			for key, values := range r.URL.Query() {
+				args[key] = values[0]
+			}
+		} else if e := json.NewDecoder(r.Body).Decode(&args); e != nil {
 			t.Error(e)
 		}
-		method := strings.TrimPrefix(r.URL.Path, "/")
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.calls = append(f.calls, apiCall{method, args})
@@ -208,6 +219,9 @@ func TestSlackContextPaginationAndPermissionErrors(t *testing.T) {
 	count := 0
 	f.hook = func(method string, args map[string]any) (any, int) {
 		count++
+		if method != "conversations.replies" || args["channel"] != "C1" || args["ts"] != "1" || args["limit"] != "100" || (count > 1 && args["cursor"] != "more") {
+			t.Error("thread history query or pagination changed")
+		}
 		return map[string]any{"ok": true, "messages": []any{map[string]any{"ts": fmt.Sprint(count), "user": "U1", "text": strings.Repeat("x", 7000)}, map[string]any{"ts": "100", "text": "future"}}, "response_metadata": map[string]any{"next_cursor": "more"}}, 200
 	}
 	text, e := f.s.Context(testContext, "C1", "1", "10")

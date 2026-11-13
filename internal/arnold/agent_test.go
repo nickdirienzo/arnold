@@ -176,6 +176,30 @@ func followup(ts, who, text string) Envelope {
 	e.Event.Text = text
 	return e
 }
+func TestThreadContextFailureRetainsRequestAndRecovers(t *testing.T) {
+	f := newFixture(t)
+	f.chat.contextErr = SlackError("invalid_arguments")
+	f.receive(incoming("1"))
+	f.drain()
+	f.drain()
+	if len(f.p.runs) != 0 || len(f.chat.posts) != 1 || !strings.Contains(f.chat.posts[0], "could not read this Slack thread") || !strings.Contains(f.chat.posts[0], "Nothing has been sent to Paddock") {
+		t.Fatal("thread context failure was misreported or dispatched")
+	}
+	rows, err := f.a.Store.Pending()
+	if err != nil || len(rows) != 1 || rows[0].Payload.Prepared != nil {
+		t.Fatal("request was lost or frozen before context was available")
+	}
+	f.restart()
+	f.chat.contextErr = nil
+	f.drain()
+	if len(f.p.runs) != 1 || !strings.Contains(f.p.runs[0].Prompt, "Current message from U1:\n<@UA> fix it") {
+		t.Fatal("retained request did not recover")
+	}
+	f.drain()
+	if len(f.p.runs) != 1 {
+		t.Fatal("recovered request was dispatched twice")
+	}
+}
 func TestRoutingContinuationAndNewMessagesOnly(t *testing.T) {
 	f := newFixture(t)
 	first := incoming("1")
