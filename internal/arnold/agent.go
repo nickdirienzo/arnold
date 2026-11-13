@@ -59,12 +59,22 @@ func (a *Agent) Receive(body Envelope) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if mention || active {
+		autoSubscribe := a.Config.Channels[e.Channel].AutoSubscribe && (e.ThreadTS == "" || e.ThreadTS == e.TS)
+		if mention || active || autoSubscribe {
 			actor = e.User
 		}
 	}
 	if actor == "" && trigger != nil {
 		actor = "automation:" + trigger.ID
+	}
+	if actor == "" && a.Config.Channels[e.Channel].AutoSubscribeBots && !human && (e.BotID != "" || e.AppID != "" || e.Subtype == "bot_message") {
+		active, err := a.Store.Active(key)
+		if err != nil {
+			return "", err
+		}
+		if e.ThreadTS == "" || e.ThreadTS == e.TS || active {
+			actor = "automation:channel:" + e.Channel
+		}
 	}
 	if actor == "" {
 		return "", nil

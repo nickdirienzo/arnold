@@ -2,7 +2,9 @@
   "teamId": "T0123456789",
   "channels": {
     "C0123456789": {
-      "repo": "example-project"
+      "repo": "example-project",
+      "autoSubscribe": false,
+      "autoSubscribeBots": false
     }
   },
   "users": {
@@ -13,7 +15,7 @@
   },
   "automation": {
     "identity": "arnold-automation",
-    "profile": "investigation"
+    "profile": "implementation"
   },
   "triggers": [
     {

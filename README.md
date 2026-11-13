@@ -2,7 +2,7 @@
 
 Arnold is a Slack-native engineering assistant, named after Jurassic Park's chief engineer Ray Arnold. It runs as a single Go binary on a local orchestration host and delegates engineering work to Paddock/OpenShell.
 
-A mention starts a conversation in a Slack thread. Later messages continue it without another mention. Arnold maps authenticated Slack users to configured Paddock identities, forwards work through the public CLI, and relays public progress and answers using Slack's expandable assistant thinking block. It adds 👀 while a request is awaiting its response.
+A mention starts a conversation in a Slack thread. Channels can also opt into automatic conversations for every new top-level human message. Later messages continue the thread without another mention. Arnold maps authenticated Slack users to configured Paddock identities, forwards work through the public CLI, and relays public progress and answers using Slack's expandable assistant thinking block. It adds 👀 while a request is awaiting its response.
 
 Paddock owns durable tasks, native agent conversations, identities, worktrees and execution. OpenShell provides isolation. Rex provides independent interactive terminal access. Arnold performs deterministic Slack communication and coordination; it runs no model or agent SDK on its host.
 
@@ -47,17 +47,32 @@ Use `arnold --help` for options. `ARNOLD_CONFIG`, `ARNOLD_STATE`, `PADDOCK_BIN` 
 
 Only the configured workspace and channels can dispatch work. Every human participant needs an identity mapping. Edits, deletions, unrelated chatter, duplicate event copies and Arnold's own messages are ignored. Unknown users receive an actionable notice. Missing reaction permission is logged and retried without blocking work.
 
+Set `autoSubscribe: true` on a channel to start a conversation for every new top-level human message, without requiring a mention:
+
+```json
+"channels": {
+  "C0123456789": {
+    "repo": "example-project",
+    "autoSubscribe": true
+  }
+}
+```
+
+Invite Arnold to the channel so it receives messages. Replies continue an activated thread, including replies received while its first request is pending. Replies to older, inactive threads still need a mention. The default is `false`; bot messages require the additional setting below or explicit automatic triggers. Restart Arnold after changing configuration. Enabling the setting does not backfill existing messages.
+
+To include every bot-posted alert in that channel, also set `autoSubscribeBots: true` and configure `automation` with a named identity and profile. This explicitly trusts all bot sources in the selected channel. Each new top-level bot message starts a conversation; bot replies continue activated threads. Arnold's own messages are always ignored. Set `automation.recipientUserId` for Slack's assistant thinking blocks on these conversations. For selected bot sources or text matches, use automatic triggers instead.
+
 ## Conversation and identity behavior
 
 A new task receives the bounded earlier Slack context so an initial reply such as “investigate this” has a referent. **Resumed tasks receive only the new authored message.** Paddock already retains previous user/assistant messages in its native session; Arnold does not resend them or fetch thread history on normal follow-ups.
 
 Paddock provenance is immutable. Each participant's identity/profile has a task pointer in the thread. Participants can alternate and resume their respective tasks after a restart. When a new participant or a different agent requires a new task, Arnold includes the predecessor reference and Slack context under the current authenticated identity. An automation task is never reassigned to a human identity.
 
-The configured profile determines available capabilities. Human requests can use `investigation` or `implementation`; autonomous work uses `investigation`. Within those permissions, the agent decides what to investigate or change. Merging and deployment require human review. Arnold exposes no privileged host tools for model-directed operations.
+Human requests and autonomous work can use the same `implementation` profile, allowing investigation, code changes and pull requests. The optional `investigation` profile restricts either kind of work to investigation. Within the configured permissions, the agent decides what to investigate or change. Merging and deployment require human review. Arnold exposes no privileged host tools for model-directed operations.
 
 ## Automatic triggers
 
-Set `triggers` to `[]` and omit `automation` for a human-only deployment. An automatic trigger requires an explicit channel, exact bot ID or human user ID, a literal text substring, and a designated automation identity. Unlisted bots cannot initiate or continue work.
+Set `triggers` to `[]`, leave `autoSubscribeBots` disabled and omit `automation` for a human-only deployment. An automatic trigger requires an explicit channel, exact bot ID or human user ID, a literal text substring, and a designated automation identity. Bots cannot initiate or continue work unless an explicit trigger matches or their channel enables `autoSubscribeBots`.
 
 An automatic event starts or continues the same conversation path as a human mention. There are no incident objects, remediation workflows or independent task scheduler. Set `automation.recipientUserId` to a channel member ID for assistant thinking blocks in bot-initiated conversations. Without a human recipient, answers use ordinary replies and diagnostics remain local.
 

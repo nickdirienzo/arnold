@@ -17,7 +17,9 @@ type Actor struct {
 	RecipientUserID string `json:"recipientUserId,omitempty"`
 }
 type Route struct {
-	Repo string `json:"repo"`
+	Repo              string `json:"repo"`
+	AutoSubscribe     bool   `json:"autoSubscribe,omitempty"`
+	AutoSubscribeBots bool   `json:"autoSubscribeBots,omitempty"`
 }
 type Trigger struct {
 	ID       string `json:"id"`
@@ -70,6 +72,9 @@ func (c Config) Validate() error {
 		if !channelID.MatchString(id) || r.Repo == "" {
 			return fail("channels require Slack IDs and a repository")
 		}
+		if r.AutoSubscribeBots && (!r.AutoSubscribe || c.Automation == nil) {
+			return fail("autoSubscribeBots requires autoSubscribe and an automation identity")
+		}
 	}
 	actors := []Actor{}
 	for _, a := range c.Users {
@@ -77,9 +82,6 @@ func (c Config) Validate() error {
 	}
 	if c.Automation != nil {
 		actors = append(actors, *c.Automation)
-		if c.Automation.Profile != "investigation" {
-			return fail("automation must use investigation")
-		}
 		if c.Automation.RecipientUserID != "" && !userID.MatchString(c.Automation.RecipientUserID) {
 			return fail("automation recipientUserId must be a Slack member ID")
 		}
