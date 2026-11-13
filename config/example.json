@@ -1,0 +1,27 @@
+{
+  "teamId": "T0123456789",
+  "channels": {
+    "C0123456789": {
+      "repo": "example-project"
+    }
+  },
+  "users": {
+    "U0123456789": {
+      "identity": "engineer-bot",
+      "profile": "implementation"
+    }
+  },
+  "automation": {
+    "identity": "arnold-automation",
+    "profile": "investigation"
+  },
+  "triggers": [
+    {
+      "id": "api-monitor",
+      "channel": "C0123456789",
+      "botId": "B0123456789",
+      "contains": "Production: API status 500 triggered"
+    }
+  ],
+  "agent": "claude"
+}
