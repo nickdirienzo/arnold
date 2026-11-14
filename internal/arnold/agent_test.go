@@ -36,6 +36,7 @@ func (p *fakePaddock) Run(_ context.Context, o RunOptions) (Task, error) {
 	task.ID = fmt.Sprintf("task%d", len(p.runs))
 	task.Runtime = "openshell"
 	task.Status = "running"
+	task.IdleTTL = o.IdleTTL
 	task.Session.Agent = o.Agent
 	task.Session.ConversationID = "conversation"
 	task.Provenance.Identity = o.Identity

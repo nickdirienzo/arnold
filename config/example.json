@@ -25,5 +25,6 @@
       "contains": "Production: API status 500 triggered"
     }
   ],
-  "agent": "claude"
+  "agent": "claude",
+  "idleTtl": "30m"
 }

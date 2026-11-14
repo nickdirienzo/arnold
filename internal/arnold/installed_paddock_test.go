@@ -5,11 +5,85 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestInstalledPaddockIdleTTLDispatchContract(t *testing.T) {
+	binary := os.Getenv("ARNOLD_PADDOCK_TEST_BIN")
+	if binary == "" {
+		t.Skip("set ARNOLD_PADDOCK_TEST_BIN to exercise the installed CLI")
+	}
+	for _, agent := range []string{"codex", "claude"} {
+		t.Run(agent, func(t *testing.T) { testInstalledPaddockIdleTTLDispatchContract(t, binary, agent) })
+	}
+}
+
+func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent string) {
+	t.Helper()
+	// Seed an existing dispatch so retries exercise the real CLI without
+	// provisioning a sandbox, starting a poller, or contacting a provider.
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	if err := os.Mkdir(repo, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init", repo}, {"-C", repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "--allow-empty", "-m", "fixture"}} {
+		if data, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git fixture: %s: %v", data, err)
+		}
+	}
+	repo, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := filepath.Join(dir, "registry")
+	t.Setenv("PADDOCK_HOME", registry)
+	command := exec.Command(binary, "identity", "create", "fixture", "--profiles", "implementation")
+	command.Env = []string{"PADDOCK_HOME=" + registry, "PATH=" + os.Getenv("PATH")}
+	if data, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("identity fixture: %s: %v", data, err)
+	}
+	caller, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := "0123456789abcdef01234567"
+	record := map[string]any{
+		"version": 1, "id": taskID, "runtime": "openshell", "repo": repo,
+		"status": "stopped", "prompt": "Investigate the fixture", "idle_ttl": "24h0m0s",
+		"session": map[string]string{"agent": agent},
+		"provenance": map[string]any{
+			"caller": caller.Uid + ":" + caller.Username, "requester": "U1",
+			"requester_source": "arnold-slack", "external_id": "stable",
+			"identity": "fixture", "profile": "implementation", "context": map[string]string{"channel": "C1"},
+		},
+	}
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(registry, "tasks", taskID+".json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	p := Paddock{Binary: binary}
+	options := RunOptions{Prompt: "Investigate the fixture", Repo: repo, Actor: "U1", Identity: "fixture", Profile: "implementation", Agent: agent, ExternalID: "stable", Context: map[string]string{"channel": "C1"}}
+	for _, value := range []string{"24h", "1440m", "1h", ""} {
+		options.IdleTTL = value
+		task, err := p.Run(testContext, options)
+		if value == "24h" || value == "1440m" {
+			if err != nil || task.ID != taskID || task.IdleTTL != "24h0m0s" {
+				t.Fatalf("matching retry %q: %+v, %v", value, task, err)
+			}
+		} else if err == nil || !strings.Contains(err.Error(), "different dispatch data") {
+			t.Fatalf("changed/omitted TTL %q did not preserve dispatch conflict: %v", value, err)
+		}
+	}
+}
 
 func TestNativeOutputHelper(t *testing.T) {
 	index := -1

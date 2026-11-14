@@ -312,7 +312,11 @@ func (a *Agent) dispatch(ctx context.Context, row Receipt) (bool, error) {
 				afterTurn = ""
 			}
 		}
-		p.Prepared = &Prepared{Prompt: strings.Join(lines, "\n\n"), Previous: previous, Target: target, Identity: selected.Identity, Profile: selected.Profile, Agent: agent, AfterTurn: afterTurn, Repo: a.Config.Channels[channel].Repo}
+		idleTTL, err := normalizeIdleTTL(a.Config.IdleTTL)
+		if err != nil {
+			return false, err
+		}
+		p.Prepared = &Prepared{Prompt: strings.Join(lines, "\n\n"), Previous: previous, Target: target, Identity: selected.Identity, Profile: selected.Profile, Agent: agent, AfterTurn: afterTurn, Repo: a.Config.Channels[channel].Repo, IdleTTL: idleTTL}
 		if err = a.Store.Prepare(row.ID, p); err != nil {
 			return false, err
 		}
@@ -340,7 +344,7 @@ func (a *Agent) dispatch(ctx context.Context, row Receipt) (bool, error) {
 	if previous != nil {
 		predecessor = previous.Task
 	}
-	t, err := a.Paddock.Run(ctx, RunOptions{Prompt: p.Prepared.Prompt, Repo: p.Prepared.Repo, Actor: actor, Identity: selected.Identity, Profile: selected.Profile, Agent: agent, ExternalID: row.ID, Context: map[string]string{"team": team, "channel": channel, "thread_ts": thread, "message_ts": e.TS, "predecessor": predecessor}})
+	t, err := a.Paddock.Run(ctx, RunOptions{Prompt: p.Prepared.Prompt, Repo: p.Prepared.Repo, Actor: actor, Identity: selected.Identity, Profile: selected.Profile, Agent: agent, IdleTTL: p.Prepared.IdleTTL, ExternalID: row.ID, Context: map[string]string{"team": team, "channel": channel, "thread_ts": thread, "message_ts": e.TS, "predecessor": predecessor}})
 	if err != nil {
 		return false, err
 	}

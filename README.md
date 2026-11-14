@@ -37,6 +37,12 @@ Create/install the Slack app using `slack-app-manifest.json`, enable Socket Mode
 
 The top-level `agent` selects `claude` or `codex`; the example uses Claude, and configurations that omit the field retain Codex. Paddock must have the corresponding OpenShell provider configured. Arnold does not create GitHub Apps, retrieve private keys, or configure model credentials.
 
+Set top-level `idleTtl` to a positive Go duration such as `"30m"` to request idle expiry for new Arnold tasks. Omit it or use `""` for unlimited interactive lifetime; zero, negative durations and day suffixes such as `1d` are invalid. Arnold passes the policy through Paddock's `--idle-ttl` option. Paddock starts the countdown after confirmed completion and live idle checks, preserves the task/conversation/workspace, and resumes that conversation on the next Slack reply.
+
+Automatic expiry supports qualified OpenShell Codex runtimes and Claude Code 2.1.325 integration-only sessions. It requires an updated Paddock executable, runtime image and compatible v9 runtime poller. For Claude TTL sessions, submit all input through Arnold or `paddock message`; viewing the TUI is supported, but direct typing or inbox writes are outside the expiry contract. Paddock disables background/autonomous work for these sessions while preserving foreground subagents and native approvals. Older Claude images must be rebuilt before creating TTL tasks. See [Paddock's integration contract](https://github.com/nickdirienzo/paddock/blob/main/docs/integrations.md#per-task-idle-ttl-contract) for runtime requirements.
+
+Changing `idleTtl` affects newly prepared task dispatches. Existing tasks keep their policy, and retries keep the policy frozen before the first dispatch, including omission in older pending requests. Arnold does not expire Slack thread bindings, invoke workspace GC or close Rex panes itself. Delegated children opt in separately in Paddock.
+
 ```sh
 arnold run
 # Explicit paths are also supported:
@@ -80,7 +86,7 @@ An automatic event starts or continues the same conversation path as a human men
 
 SQLite stores routing pointers, pending transport payloads, delivery receipts, output cursors, reaction state and stream metadata. Successfully delivered inbound payloads are removed. Outbound agent text is not retained as a second conversation history.
 
-Socket Mode envelopes are acknowledged after durable intake. Pending dispatches use a stable external ID and frozen prompt, preserving Paddock's idempotency across restarts. Confirmed offline messages can retry; ambiguous `claimed`/`uncertain` receipts require inspection and are not replayed automatically. Missing OpenShell access or credentials never cause a host-execution fallback.
+Socket Mode envelopes are acknowledged after durable intake. Pending dispatches use a stable external ID, frozen prompt and frozen idle TTL, preserving Paddock's idempotency across restarts. Confirmed offline messages can retry; ambiguous `claimed`/`uncertain` receipts require inspection and are not replayed automatically. Missing OpenShell access or credentials never cause a host-execution fallback.
 
 Output is read through `paddock output --limit 20 --json`. Arnold drains pages, reassembles multipart messages and advances cursors only after delivery. A restart resumes saved Slack streams and skips recorded delivery chunks. It surfaces expired cursors or unavailable history rather than resetting and replaying output. Native `turn_finished` events determine when a response ends, independently of process exit. See [output delivery](docs/paddock-output.md) for limits and delivery guarantees.
 

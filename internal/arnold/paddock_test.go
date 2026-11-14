@@ -67,7 +67,7 @@ func TestPaddockHelper(t *testing.T) {
 		if e != nil || json.Unmarshal(b, &contextData) != nil || contextData["channel"] != "C1" {
 			os.Exit(4)
 		}
-		json.NewEncoder(os.Stdout).Encode(map[string]any{"id": "task1", "runtime": flag("--runtime"), "session": map[string]string{"agent": flag("--agent")}, "provenance": map[string]string{"identity": flag("--identity"), "profile": flag("--profile")}})
+		json.NewEncoder(os.Stdout).Encode(map[string]any{"id": "task1", "runtime": flag("--runtime"), "idle_ttl": flag("--idle-ttl"), "session": map[string]string{"agent": flag("--agent")}, "provenance": map[string]string{"identity": flag("--identity"), "profile": flag("--profile")}})
 	case "message":
 		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": args[2]})
 		if args[2] != "delivered" {

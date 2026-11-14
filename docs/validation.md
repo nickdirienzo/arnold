@@ -7,7 +7,7 @@ go test -race ./...
 go vet ./...
 ```
 
-Tests use real SQLite, local HTTP/WebSocket servers and executable subprocess fixtures. They cover authenticated thread routing, source allowlists, identity and agent handoffs, new-message-only native continuations, durable retry prompts, uncertain delivery, Unicode/multipart output, cursor recovery, native assistant streams, 👀 reactions and graceful cancellation.
+Tests use real SQLite, local HTTP/WebSocket servers and executable subprocess fixtures. They cover authenticated thread routing, source allowlists, identity and agent handoffs, new-message-only native continuations, durable retry prompts and idle TTL policies, uncertain delivery, Unicode/multipart output, cursor recovery, native assistant streams, 👀 reactions and graceful cancellation. TTL coverage includes duration validation, optional/canonical CLI arguments, retries across configuration changes, and routing replies to stopped tasks through the existing message receipt path.
 
 ## State migration
 
@@ -28,6 +28,8 @@ ARNOLD_PADDOCK_TEST_BIN="$(command -v paddock)" go test -race ./...
 ```
 
 This optional test runs the installed Paddock output CLI against a disposable registry and deterministic native RPC fixture. It exercises Paddock's actual opaque cursors, bounded pages, multipart answers and native turn completion, followed by delivery failure and service-state restart. It launches no model, uses no credentials and reads no existing tasks. Without the variable, the installed-CLI test is skipped.
+
+The installed-CLI suite also seeds a disposable repository, identity and prior TTL dispatch for both Codex and Claude. It verifies that Arnold's `run --idle-ttl` retries return the same task for equivalent durations and surface Paddock's conflict for a changed or omitted policy. It starts no sandbox or poller. Actual idle shutdown and native resume remain Paddock's responsibility and are tested in that repository.
 
 ## Binary and supervision
 

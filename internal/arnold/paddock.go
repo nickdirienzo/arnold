@@ -121,6 +121,10 @@ func VerifyTask(t Task, identity, profile, agent string) error {
 }
 func (p Paddock) Run(ctx context.Context, o RunOptions) (Task, error) {
 	var t Task
+	idleTTL, e := normalizeIdleTTL(o.IdleTTL)
+	if e != nil {
+		return t, e
+	}
 	dir, e := os.MkdirTemp("", "arnold-")
 	if e != nil {
 		return t, e
@@ -140,8 +144,14 @@ func (p Paddock) Run(ctx context.Context, o RunOptions) (Task, error) {
 		o.Agent = "codex"
 	}
 	args := []string{"run", "--prompt-file", filepath.Join(dir, "prompt"), "--repo", o.Repo, "--runtime", "openshell", "--agent", o.Agent, "--identity", o.Identity, "--profile", o.Profile, "--requester", o.Actor, "--requester-source", "arnold-slack", "--external-id", o.ExternalID, "--context-file", filepath.Join(dir, "context"), "--json", "--detach"}
+	if idleTTL != "" {
+		args = append(args, "--idle-ttl", idleTTL)
+	}
 	if e = p.call(ctx, args, &t, 4<<20); e != nil {
 		return t, e
+	}
+	if t.IdleTTL != idleTTL {
+		return t, fmt.Errorf("Paddock returned an unexpected idle TTL; refusing dispatch binding")
 	}
 	return t, VerifyTask(t, o.Identity, o.Profile, o.Agent)
 }

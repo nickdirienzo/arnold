@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type Actor struct {
@@ -35,6 +36,7 @@ type Config struct {
 	Automation *Actor           `json:"automation,omitempty"`
 	Triggers   []Trigger        `json:"triggers"`
 	Agent      string           `json:"agent,omitempty"`
+	IdleTTL    string           `json:"idleTtl,omitempty"`
 }
 
 var channelID = regexp.MustCompile(`^[CG][A-Z0-9]+$`)
@@ -57,6 +59,16 @@ func (c Config) AgentName() string {
 	}
 	return c.Agent
 }
+func normalizeIdleTTL(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration <= 0 {
+		return "", fmt.Errorf("idleTtl must be a positive Go duration, e.g. 24h; omit for no TTL")
+	}
+	return duration.String(), nil
+}
 func (c Config) Validate() error {
 	fail := func(s string) error { return fmt.Errorf("configuration: %s", s) }
 	if c.TeamID == "" || c.Channels == nil || c.Users == nil {
@@ -64,6 +76,9 @@ func (c Config) Validate() error {
 	}
 	if c.AgentName() != "codex" && c.AgentName() != "claude" {
 		return fail("agent must be codex or claude")
+	}
+	if _, err := normalizeIdleTTL(c.IdleTTL); err != nil {
+		return fail(err.Error())
 	}
 	if len(c.Triggers) > 0 && c.Automation == nil {
 		return fail("configured triggers require an automation identity")
@@ -133,6 +148,7 @@ type Prepared struct {
 	Agent     string   `json:"agent"`
 	AfterTurn string   `json:"afterTurn"`
 	Repo      string   `json:"repo"`
+	IdleTTL   string   `json:"idleTtl,omitempty"`
 }
 type Payload struct {
 	Event    Event     `json:"event"`
@@ -149,6 +165,7 @@ type Task struct {
 	Runtime    string `json:"runtime"`
 	Status     string `json:"status"`
 	Blocked    bool   `json:"blocked"`
+	IdleTTL    string `json:"idle_ttl,omitempty"`
 	Provenance struct {
 		Identity    string `json:"identity"`
 		Profile     string `json:"profile"`
@@ -185,6 +202,7 @@ type OutputPage struct {
 }
 type RunOptions struct {
 	Prompt, Repo, Actor, Identity, Profile, Agent, ExternalID string
+	IdleTTL                                                   string
 	Context                                                   map[string]string
 }
 type MessageReceipt struct {
