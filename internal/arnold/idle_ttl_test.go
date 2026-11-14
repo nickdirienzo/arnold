@@ -77,7 +77,7 @@ func TestPaddockIdleTTLCLIContract(t *testing.T) {
 }
 
 func TestIdleTTLDispatchRetryKeepsFrozenPolicy(t *testing.T) {
-	for _, initial := range []string{"", "24h"} {
+	for _, initial := range []string{"", "30m", "24h"} {
 		for _, changed := range []string{"", "1h"} {
 			t.Run(initial+"/"+changed, func(t *testing.T) {
 				f := newFixture(t)
@@ -90,8 +90,8 @@ func TestIdleTTLDispatchRetryKeepsFrozenPolicy(t *testing.T) {
 					t.Fatalf("missing frozen dispatch: %+v, %v", rows, err)
 				}
 				prepared := *rows[0].Payload.Prepared
-				want := ""
-				if initial != "" {
+				want := "30m0s"
+				if initial == "24h" {
 					want = "24h0m0s"
 				}
 				if prepared.IdleTTL != want {
@@ -109,7 +109,7 @@ func TestIdleTTLDispatchRetryKeepsFrozenPolicy(t *testing.T) {
 				f.chat.contextErr = nil
 				f.receive(incoming("3"))
 				f.drain()
-				next := ""
+				next := "30m0s"
 				if changed != "" {
 					next = "1h0m0s"
 				}
@@ -118,6 +118,52 @@ func TestIdleTTLDispatchRetryKeepsFrozenPolicy(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestDefaultIdleTTLDispatch(t *testing.T) {
+	for _, agent := range []string{"codex", "claude"} {
+		t.Run(agent, func(t *testing.T) {
+			f := newFixture(t)
+			f.a.Config.Agent = agent
+			f.receive(incoming("1"))
+			f.drain()
+			e := incoming("2")
+			e.Event.BotID, e.Event.Subtype, e.Event.Text = "B2", "bot_message", "Production 500"
+			f.receive(e)
+			f.drain()
+			if len(f.p.runs) != 2 {
+				t.Fatalf("expected human and automation dispatches: %+v", f.p.runs)
+			}
+			for _, run := range f.p.runs {
+				if run.Agent != agent || run.IdleTTL != "30m0s" {
+					t.Fatalf("dispatch lost default TTL: %+v", run)
+				}
+			}
+		})
+	}
+}
+
+func TestLegacyDispatchRetryPreservesOmittedTTL(t *testing.T) {
+	f := newFixture(t)
+	f.p.runErr = errors.New("dispatch outcome unavailable")
+	id := f.receive(incoming("1"))
+	f.drain()
+	rows, err := f.a.Store.Pending()
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("missing pending dispatch: %+v, %v", rows, err)
+	}
+	// Simulate a dispatch prepared before Arnold defaulted new tasks to 30m.
+	payload := *rows[0].Payload
+	payload.Prepared.IdleTTL = ""
+	if err := f.a.Store.Prepare(id, payload); err != nil {
+		t.Fatal(err)
+	}
+	f.restart()
+	f.p.runErr = nil
+	f.drain()
+	if len(f.p.runs) != 1 || f.p.runs[0].IdleTTL != "" || f.p.runs[0].ExternalID != id || f.p.runs[0].Prompt != payload.Prepared.Prompt {
+		t.Fatalf("legacy retry changed dispatch: %+v", f.p.runs)
 	}
 }
 
@@ -134,8 +180,18 @@ func TestIdleTTLAutomationDispatch(t *testing.T) {
 }
 
 func TestStoppedTTLTaskContinuesWithSameMessageReceipt(t *testing.T) {
+	for _, agent := range []string{"codex", "claude"} {
+		t.Run(agent, func(t *testing.T) {
+			testStoppedTTLTaskContinuesWithSameMessageReceipt(t, agent)
+		})
+	}
+}
+
+func testStoppedTTLTaskContinuesWithSameMessageReceipt(t *testing.T, agent string) {
+	t.Helper()
 	f := newFixture(t)
-	f.a.Config.IdleTTL = "24h"
+	f.a.Config.Agent = agent
+	f.a.Config.IdleTTL = "30m"
 	f.receive(incoming("1"))
 	f.drain()
 	task := f.p.tasks["task1"]

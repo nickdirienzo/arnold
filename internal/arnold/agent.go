@@ -312,7 +312,7 @@ func (a *Agent) dispatch(ctx context.Context, row Receipt) (bool, error) {
 				afterTurn = ""
 			}
 		}
-		idleTTL, err := normalizeIdleTTL(a.Config.IdleTTL)
+		idleTTL, err := a.Config.TaskIdleTTL()
 		if err != nil {
 			return false, err
 		}

@@ -59,13 +59,20 @@ func (c Config) AgentName() string {
 	}
 	return c.Agent
 }
+func (c Config) TaskIdleTTL() (string, error) {
+	value := c.IdleTTL
+	if value == "" {
+		value = "30m"
+	}
+	return normalizeIdleTTL(value)
+}
 func normalizeIdleTTL(value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
 	duration, err := time.ParseDuration(value)
 	if err != nil || duration <= 0 {
-		return "", fmt.Errorf("idleTtl must be a positive Go duration, e.g. 24h; omit for no TTL")
+		return "", fmt.Errorf("idleTtl must be a positive Go duration, e.g. 30m; defaults to 30m")
 	}
 	return duration.String(), nil
 }
@@ -168,6 +175,7 @@ type Task struct {
 	IdleTTL    string `json:"idle_ttl,omitempty"`
 	Provenance struct {
 		Identity    string `json:"identity"`
+		Launcher    string `json:"launcher,omitempty"`
 		Profile     string `json:"profile"`
 		Requester   string `json:"requester"`
 		GitHubActor string `json:"github_actor"`

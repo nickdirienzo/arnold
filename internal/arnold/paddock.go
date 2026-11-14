@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -92,6 +93,13 @@ func (p Paddock) Check(ctx context.Context, c Config) error {
 	if e := p.call(ctx, []string{"identity", "list", "--json"}, &identities, 4<<20); e != nil {
 		return e
 	}
+	var launchers map[string]struct {
+		Runtime  string `json:"runtime"`
+		ReadOnly bool   `json:"read_only"`
+	}
+	if e := p.call(ctx, []string{"launcher", "list", "--json"}, &launchers, 4<<20); e != nil {
+		return e
+	}
 	actors := []Actor{}
 	for _, a := range c.Users {
 		actors = append(actors, a)
@@ -110,11 +118,19 @@ func (p Paddock) Check(ctx context.Context, c Config) error {
 		if !ok || i.Disabled || i.Mode != "app" || !profileOK {
 			return fmt.Errorf("Paddock identity %s must be an active GitHub App allowing %s", a.Identity, a.Profile)
 		}
+		launcher, ok := launchers[a.Profile]
+		if !ok || launcher.Runtime != "openshell" || (a.Profile == "investigation" && !launcher.ReadOnly) {
+			return fmt.Errorf("Paddock launcher %s must use OpenShell and preserve the configured read-only policy", a.Profile)
+		}
 	}
 	return nil
 }
 func VerifyTask(t Task, identity, profile, agent string) error {
-	if t.ID == "" || t.Runtime != "openshell" || t.Provenance.Identity != identity || t.Provenance.Profile != profile || (agent != "" && t.Session.Agent != agent) {
+	launcher := t.Provenance.Launcher
+	if launcher == "" {
+		launcher = t.Provenance.Profile
+	}
+	if t.ID == "" || t.Runtime != "openshell" || t.Provenance.Identity != identity || launcher != profile || (agent != "" && t.Session.Agent != agent) {
 		return fmt.Errorf("Paddock returned an unexpected runtime, identity, profile or agent; refusing continuation")
 	}
 	return nil
@@ -143,11 +159,30 @@ func (p Paddock) Run(ctx context.Context, o RunOptions) (Task, error) {
 	if o.Agent == "" {
 		o.Agent = "codex"
 	}
-	args := []string{"run", "--prompt-file", filepath.Join(dir, "prompt"), "--repo", o.Repo, "--runtime", "openshell", "--agent", o.Agent, "--identity", o.Identity, "--profile", o.Profile, "--requester", o.Actor, "--requester-source", "arnold-slack", "--external-id", o.ExternalID, "--context-file", filepath.Join(dir, "context"), "--json", "--detach"}
+	args := []string{"run", "--prompt-file", filepath.Join(dir, "prompt"), "--repo", o.Repo, "--runtime", "openshell", "--agent", o.Agent, "--identity", o.Identity, "--launcher", o.Profile, "--requester", o.Actor, "--requester-source", "arnold-slack", "--external-id", o.ExternalID, "--context-file", filepath.Join(dir, "context"), "--json", "--detach"}
 	if idleTTL != "" {
 		args = append(args, "--idle-ttl", idleTTL)
 	}
-	if e = p.call(ctx, args, &t, 4<<20); e != nil {
+	e = p.call(ctx, args, &t, 4<<20)
+	// A pre-launcher task has only provenance.profile. Inspect a confirmed
+	// dispatch conflict before retrying without the new launcher assertion.
+	var ce *commandError
+	if errors.As(e, &ce) {
+		match := legacyDispatchConflict.FindStringSubmatch(ce.stderr)
+		if len(match) == 2 {
+			prior, showErr := p.Show(ctx, match[1])
+			if showErr == nil && prior.Provenance.Launcher == "" && prior.IdleTTL == idleTTL && VerifyTask(prior, o.Identity, o.Profile, o.Agent) == nil {
+				for i, arg := range args {
+					if arg == "--launcher" {
+						args = append(args[:i:i], args[i+2:]...)
+						break
+					}
+				}
+				e = p.call(ctx, args, &t, 4<<20)
+			}
+		}
+	}
+	if e != nil {
 		return t, e
 	}
 	if t.IdleTTL != idleTTL {
@@ -155,6 +190,9 @@ func (p Paddock) Run(ctx context.Context, o RunOptions) (Task, error) {
 	}
 	return t, VerifyTask(t, o.Identity, o.Profile, o.Agent)
 }
+
+var legacyDispatchConflict = regexp.MustCompile(`^paddock: external ID already belongs to task ([a-f0-9]{24}) with different dispatch data$`)
+
 func (p Paddock) Show(ctx context.Context, id string) (Task, error) {
 	var t Task
 	e := p.call(ctx, []string{"show", id, "--json"}, &t, 4<<20)

@@ -19,11 +19,13 @@ func TestInstalledPaddockIdleTTLDispatchContract(t *testing.T) {
 		t.Skip("set ARNOLD_PADDOCK_TEST_BIN to exercise the installed CLI")
 	}
 	for _, agent := range []string{"codex", "claude"} {
-		t.Run(agent, func(t *testing.T) { testInstalledPaddockIdleTTLDispatchContract(t, binary, agent) })
+		for _, provenance := range []string{"profile", "launcher"} {
+			t.Run(agent+"/"+provenance, func(t *testing.T) { testInstalledPaddockIdleTTLDispatchContract(t, binary, agent, provenance) })
+		}
 	}
 }
 
-func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent string) {
+func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent, provenance string) {
 	t.Helper()
 	// Seed an existing dispatch so retries exercise the real CLI without
 	// provisioning a sandbox, starting a poller, or contacting a provider.
@@ -43,7 +45,7 @@ func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent str
 	}
 	registry := filepath.Join(dir, "registry")
 	t.Setenv("PADDOCK_HOME", registry)
-	command := exec.Command(binary, "identity", "create", "fixture", "--profiles", "implementation")
+	command := exec.Command(binary, "identity", "create", "fixture", "--launcher", "implementation")
 	command.Env = []string{"PADDOCK_HOME=" + registry, "PATH=" + os.Getenv("PATH")}
 	if data, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("identity fixture: %s: %v", data, err)
@@ -60,7 +62,7 @@ func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent str
 		"provenance": map[string]any{
 			"caller": caller.Uid + ":" + caller.Username, "requester": "U1",
 			"requester_source": "arnold-slack", "external_id": "stable",
-			"identity": "fixture", "profile": "implementation", "context": map[string]string{"channel": "C1"},
+			"identity": "fixture", provenance: "implementation", "context": map[string]string{"channel": "C1"},
 		},
 	}
 	data, err := json.Marshal(record)
@@ -82,6 +84,30 @@ func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent str
 		} else if err == nil || !strings.Contains(err.Error(), "different dispatch data") {
 			t.Fatalf("changed/omitted TTL %q did not preserve dispatch conflict: %v", value, err)
 		}
+	}
+	options.IdleTTL = "24h"
+	for _, field := range []string{"prompt", "requester", "context", "profile", "agent"} {
+		t.Run("conflict/"+field, func(t *testing.T) {
+			changed := options
+			switch field {
+			case "prompt":
+				changed.Prompt = "Different work"
+			case "requester":
+				changed.Actor = "U2"
+			case "context":
+				changed.Context = map[string]string{"channel": "C2"}
+			case "profile":
+				changed.Profile = "investigation"
+			case "agent":
+				changed.Agent = "codex"
+				if agent == "codex" {
+					changed.Agent = "claude"
+				}
+			}
+			if _, err := p.Run(testContext, changed); err == nil || !strings.Contains(err.Error(), "different dispatch data") {
+				t.Fatalf("changed %s did not preserve dispatch conflict: %v", field, err)
+			}
+		})
 	}
 }
 

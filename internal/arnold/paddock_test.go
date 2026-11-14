@@ -67,7 +67,10 @@ func TestPaddockHelper(t *testing.T) {
 		if e != nil || json.Unmarshal(b, &contextData) != nil || contextData["channel"] != "C1" {
 			os.Exit(4)
 		}
-		json.NewEncoder(os.Stdout).Encode(map[string]any{"id": "task1", "runtime": flag("--runtime"), "idle_ttl": flag("--idle-ttl"), "session": map[string]string{"agent": flag("--agent")}, "provenance": map[string]string{"identity": flag("--identity"), "profile": flag("--profile")}})
+		if flag("--profile") != "" || flag("--launcher") == "" {
+			os.Exit(6)
+		}
+		json.NewEncoder(os.Stdout).Encode(map[string]any{"id": "task1", "runtime": flag("--runtime"), "idle_ttl": flag("--idle-ttl"), "session": map[string]string{"agent": flag("--agent")}, "provenance": map[string]string{"identity": flag("--identity"), "launcher": flag("--launcher")}})
 	case "message":
 		json.NewEncoder(os.Stdout).Encode(map[string]string{"status": args[2]})
 		if args[2] != "delivered" {
@@ -77,6 +80,8 @@ func TestPaddockHelper(t *testing.T) {
 		json.NewEncoder(os.Stdout).Encode(OutputPage{TaskID: args[1], Events: []OutputEvent{}, NextCursor: flag("--after")})
 	case "identity":
 		fmt.Fprintln(os.Stdout, `{"engineer":{"mode":"app","profiles":["investigation","implementation"]}}`)
+	case "launcher":
+		fmt.Fprintln(os.Stdout, `{"implementation":{"runtime":"openshell"},"investigation":{"runtime":"openshell","read_only":true}}`)
 	case "oversize":
 		for i := 0; i < 100000; i++ {
 			fmt.Fprint(os.Stdout, strings.Repeat("x", 4096))
@@ -140,5 +145,25 @@ func TestPaddockOversizedOutputIsBoundedAndCancelled(t *testing.T) {
 	}
 	if time.Since(start) > 10*time.Second {
 		t.Fatal("oversized child was not stopped promptly")
+	}
+}
+
+func TestPaddockCheckRejectsUnsafeLaunchers(t *testing.T) {
+	for name, launchers := range map[string]string{
+		"missing":  `{}`,
+		"host":     `{"investigation":{"runtime":"host","read_only":true}}`,
+		"writable": `{"investigation":{"runtime":"openshell"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "paddock")
+			script := "#!/bin/sh\ncase $1 in\nidentity) echo '{\"engineer\":{\"mode\":\"app\"}}';;\nlauncher) echo " + shellQuote(launchers) + ";;\nesac\n"
+			if err := os.WriteFile(path, []byte(script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			c := Config{Users: map[string]Actor{"U1": {Identity: "engineer", Profile: "investigation"}}}
+			if err := (Paddock{Binary: path}).Check(testContext, c); err == nil {
+				t.Fatal("unsafe launcher accepted")
+			}
+		})
 	}
 }

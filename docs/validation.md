@@ -7,7 +7,7 @@ go test -race ./...
 go vet ./...
 ```
 
-Tests use real SQLite, local HTTP/WebSocket servers and executable subprocess fixtures. They cover authenticated thread routing, source allowlists, identity and agent handoffs, new-message-only native continuations, durable retry prompts and idle TTL policies, uncertain delivery, Unicode/multipart output, cursor recovery, native assistant streams, 👀 reactions and graceful cancellation. TTL coverage includes duration validation, optional/canonical CLI arguments, retries across configuration changes, and routing replies to stopped tasks through the existing message receipt path.
+Tests use real SQLite, local HTTP/WebSocket servers and executable subprocess fixtures. They cover authenticated thread routing, source allowlists, identity and agent handoffs, new-message-only native continuations, durable retry prompts and idle TTL policies, uncertain delivery, Unicode/multipart output, cursor recovery, native assistant streams, 👀 reactions and graceful cancellation. TTL coverage includes the 30-minute default for human and automation dispatches with either agent, duration validation, optional/canonical CLI arguments, retries across configuration changes, preservation of older dispatches without a TTL, and routing replies to stopped Codex and Claude tasks through the existing message receipt path. Both `claimed` and `uncertain` receipts stop automatic replay; confirmed `pending` deliveries retry with their original external ID.
 
 ## State migration
 
@@ -45,6 +45,13 @@ The binary is built with `CGO_ENABLED=0` and `-trimpath`. A live Node-to-Go hand
 
 ## Live acceptance
 
+Before enabling TTL dispatches, verify the runtime requirements in [Paddock's integration contract](https://github.com/nickdirienzo/paddock/blob/main/docs/integrations.md#per-task-idle-ttl-contract):
+
+1. Rebuild the runtime image from the updated Paddock checkout, retaining any project-specific image layers, and pin its immutable image ID with `paddock runtime configure --image sha256:IMAGE_ID`. Check launcher-specific runtime images too.
+2. Verify the image contains Claude Code 2.1.325, `paddock-idle`, `paddock-claude-idle` and the system Python `websockets` module. Older images cannot run Claude TTL sessions.
+3. Use the updated Paddock CLI and inspect `paddock github status --json`. Its `poller` must be running with `runtime_version` at least 9 and compatible with the installed CLI. If an older poller is running, use `paddock github stop` followed by `paddock github start`; installing a new binary does not restart it. Verify the new poller status and `paddock runtime check`.
+4. Set the deployed configuration's `idleTtl` to `"30m"` and restart Arnold with the rebuilt binary. Existing tasks and previously prepared dispatches retain their original TTL, including omission; deployment does not retrofit those tasks.
+
 Validate the intended workspace and runtime before relying on a deployment:
 
 1. Mention Arnold as a mapped user; verify the selected Paddock identity, OpenShell runtime and agent, public progress and answer.
@@ -52,5 +59,6 @@ Validate the intended workspace and runtime before relying on a deployment:
 3. Restart the service; verify that routing, output delivery, streams and reaction cleanup continue without replaying completed work.
 4. Check multiple mapped participants and an explicitly allowed automatic source. Unlisted bots must not dispatch work.
 5. Exercise permitted engineering tools and PR creation with the configured identity. Merging and deployment require human review.
+6. After an opted-in task expires, reply in its Slack thread and verify the task ID and saved conversation are reused, only the new follow-up is delivered, and the output cursor continues. Send all Claude TTL input through Arnold or `paddock message --external-id`; direct TUI input and native inbox writes fall outside the contract. Any delegated Paddock child needs its own `--idle-ttl 30m`.
 
 A working provider does not eliminate native agent consent prompts. Claude may wait for project/MCP trust; Arnold does not simulate terminal approvals or silently broaden access. Workspace IDs, credentials, task identifiers and deployment-specific notes belong in ignored local files.

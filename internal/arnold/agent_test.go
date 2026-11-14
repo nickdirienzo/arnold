@@ -334,6 +334,13 @@ func TestFrozenDispatchRetryAcrossRestart(t *testing.T) {
 	}
 }
 func TestPendingAndUncertainDelivery(t *testing.T) {
+	for _, status := range []string{"uncertain", "claimed"} {
+		t.Run(status, func(t *testing.T) { testPendingAndUncertainDelivery(t, status) })
+	}
+}
+
+func testPendingAndUncertainDelivery(t *testing.T, status string) {
+	t.Helper()
 	f := newFixture(t)
 	f.receive(incoming("1"))
 	f.drain()
@@ -344,7 +351,7 @@ func TestPendingAndUncertainDelivery(t *testing.T) {
 	if len(f.p.messages) != 1 {
 		t.Fatal("pending message did not hold thread")
 	}
-	f.p.messageStatus = "uncertain"
+	f.p.messageStatus = status
 	f.drain()
 	pending, e := f.a.Store.Pending()
 	if e != nil || len(pending) != 0 {
