@@ -31,9 +31,9 @@ cp .env.example .env
 chmod 600 .env config/local.json
 ```
 
-Set the workspace ID, allowed channels, repository aliases/paths, Slack user IDs and named Paddock identities in the local configuration. Set tokens and optional absolute paths in `.env`. Existing process environment variables take precedence over `.env` values.
+Set the workspace ID, default repository, channel overrides, Slack user IDs and named Paddock identities in the local configuration. Set tokens and optional absolute paths in `.env`. Existing process environment variables take precedence over `.env` values.
 
-Create/install the Slack app using `slack-app-manifest.json`, enable Socket Mode and create an app-level token with `connections:write`. The bot needs the manifest's scopes, including `reactions:write`. Reinstall the app after adding scopes, update the local bot token if it changes, and invite the bot to allowed channels. Verify it can read thread context using `conversations.replies`.
+Create/install the Slack app using `slack-app-manifest.json`, enable Socket Mode and create an app-level token with `connections:write`. The bot needs the manifest's scopes, including `reactions:write`. Reinstall the app after adding scopes, update the local bot token if it changes, and invite the bot to channels where it should respond. Verify it can read thread context using `conversations.replies`.
 
 The top-level `agent` selects `claude` or `codex`; the example uses Claude, and configurations that omit the field retain Codex. Paddock must have the corresponding OpenShell provider configured. Arnold does not create GitHub Apps, retrieve private keys, or configure model credentials.
 
@@ -53,7 +53,9 @@ arnold run --env-file /path/to/.env --config /path/to/config.json --state /path/
 
 Use `arnold --help` for options. `ARNOLD_CONFIG`, `ARNOLD_STATE`, `PADDOCK_BIN` and `PADDOCK_HOME` remain supported. Run one Arnold instance for a state database; the process lease rejects a second instance, including an older Node instance.
 
-Only the configured workspace and channels can dispatch work. Human participants use their `users` mapping when present, otherwise Arnold's `automation` identity and profile serve as the default. The authenticated Slack user remains the requester, with a separate task binding for each participant. If neither a user mapping nor `automation` is configured, Arnold posts an actionable notice. Edits, deletions, unrelated chatter, duplicate event copies and Arnold's own messages are ignored. Missing reaction permission is logged and retried without blocking work.
+Only the configured workspace can dispatch work. Set top-level `defaultRepo` to a repository alias/path to let human @mentions start conversations in any public or private channel Arnold is invited to. Channel entries override the repository and control automatic subscriptions. Unlisted channels require a mention to activate a thread; human replies then continue it without another mention. Direct messages are excluded. Omit `defaultRepo` to restrict dispatch to configured channels. Restart Arnold after changing configuration; earlier ignored mentions are not replayed.
+
+Human participants use their `users` mapping when present, otherwise Arnold's `automation` identity and profile serve as the default. The authenticated Slack user remains the requester, with a separate task binding for each participant. If neither a user mapping nor `automation` is configured, Arnold posts an actionable notice. Edits, deletions, unrelated chatter, duplicate event copies and Arnold's own messages are ignored. Missing reaction permission is logged and retried without blocking work.
 
 Set `autoSubscribe: true` on a channel to start a conversation for every new top-level human message, without requiring a mention:
 

@@ -30,17 +30,28 @@ type Trigger struct {
 	Contains string `json:"contains"`
 }
 type Config struct {
-	TeamID     string           `json:"teamId"`
-	Channels   map[string]Route `json:"channels"`
-	Users      map[string]Actor `json:"users"`
-	Automation *Actor           `json:"automation,omitempty"`
-	Triggers   []Trigger        `json:"triggers"`
-	Agent      string           `json:"agent,omitempty"`
-	IdleTTL    string           `json:"idleTtl,omitempty"`
+	TeamID      string           `json:"teamId"`
+	DefaultRepo string           `json:"defaultRepo,omitempty"`
+	Channels    map[string]Route `json:"channels"`
+	Users       map[string]Actor `json:"users"`
+	Automation  *Actor           `json:"automation,omitempty"`
+	Triggers    []Trigger        `json:"triggers"`
+	Agent       string           `json:"agent,omitempty"`
+	IdleTTL     string           `json:"idleTtl,omitempty"`
 }
 
 var channelID = regexp.MustCompile(`^[CG][A-Z0-9]+$`)
 var userID = regexp.MustCompile(`^[UW][A-Z0-9]+$`)
+
+func (c Config) ChannelRoute(channel string) Route {
+	if route, ok := c.Channels[channel]; ok {
+		return route
+	}
+	if !channelID.MatchString(channel) {
+		return Route{}
+	}
+	return Route{Repo: c.DefaultRepo}
+}
 
 func LoadConfig(path string) (Config, error) {
 	var c Config

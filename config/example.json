@@ -1,5 +1,6 @@
 {
   "teamId": "T0123456789",
+  "defaultRepo": "example-project",
   "channels": {
     "C0123456789": {
       "repo": "example-project",

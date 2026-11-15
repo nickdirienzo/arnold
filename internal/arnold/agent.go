@@ -35,7 +35,8 @@ func (a *Agent) logError(message string, e error) {
 }
 func (a *Agent) Receive(body Envelope) (string, error) {
 	e := body.Event
-	if body.TeamID != a.Config.TeamID || (e.Type != "message" && e.Type != "app_mention") || e.Channel == "" || e.TS == "" || a.Config.Channels[e.Channel].Repo == "" || e.Hidden || (e.Subtype != "" && e.Subtype != "bot_message" && e.Subtype != "file_share") || e.User == a.BotUserID || (a.BotID != "" && e.BotID == a.BotID) {
+	route := a.Config.ChannelRoute(e.Channel)
+	if body.TeamID != a.Config.TeamID || (e.Type != "message" && e.Type != "app_mention") || e.Channel == "" || e.TS == "" || route.Repo == "" || e.Hidden || (e.Subtype != "" && e.Subtype != "bot_message" && e.Subtype != "file_share") || e.User == a.BotUserID || (a.BotID != "" && e.BotID == a.BotID) {
 		return "", nil
 	}
 	thread := e.ThreadTS
@@ -59,7 +60,7 @@ func (a *Agent) Receive(body Envelope) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		autoSubscribe := a.Config.Channels[e.Channel].AutoSubscribe && (e.ThreadTS == "" || e.ThreadTS == e.TS)
+		autoSubscribe := route.AutoSubscribe && (e.ThreadTS == "" || e.ThreadTS == e.TS)
 		if mention || active || autoSubscribe {
 			actor = e.User
 		}
@@ -67,7 +68,7 @@ func (a *Agent) Receive(body Envelope) (string, error) {
 	if actor == "" && trigger != nil {
 		actor = "automation:" + trigger.ID
 	}
-	if actor == "" && a.Config.Channels[e.Channel].AutoSubscribeBots && !human && (e.BotID != "" || e.AppID != "" || e.Subtype == "bot_message") {
+	if actor == "" && route.AutoSubscribeBots && !human && (e.BotID != "" || e.AppID != "" || e.Subtype == "bot_message") {
 		active, err := a.Store.Active(key)
 		if err != nil {
 			return "", err
@@ -316,7 +317,7 @@ func (a *Agent) dispatch(ctx context.Context, row Receipt) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		p.Prepared = &Prepared{Prompt: strings.Join(lines, "\n\n"), Previous: previous, Target: target, Identity: selected.Identity, Profile: selected.Profile, Agent: agent, AfterTurn: afterTurn, Repo: a.Config.Channels[channel].Repo, IdleTTL: idleTTL}
+		p.Prepared = &Prepared{Prompt: strings.Join(lines, "\n\n"), Previous: previous, Target: target, Identity: selected.Identity, Profile: selected.Profile, Agent: agent, AfterTurn: afterTurn, Repo: a.Config.ChannelRoute(channel).Repo, IdleTTL: idleTTL}
 		if err = a.Store.Prepare(row.ID, p); err != nil {
 			return false, err
 		}
