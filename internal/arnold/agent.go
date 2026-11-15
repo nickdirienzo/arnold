@@ -241,14 +241,14 @@ func (a *Agent) dispatch(ctx context.Context, row Receipt) (bool, error) {
 	e := p.Event
 	actor := p.Actor
 	selected, ok := a.Config.Users[actor]
-	if strings.HasPrefix(actor, "automation:") {
+	if strings.HasPrefix(actor, "automation:") || !ok {
 		ok = a.Config.Automation != nil
 		if ok {
 			selected = *a.Config.Automation
 		}
 	}
 	if !ok {
-		return true, a.Store.Finish(row.ID, "<@"+actor+"> has no configured Paddock identity. An operator must add the mapping before Arnold can act.")
+		return true, a.Store.Finish(row.ID, "<@"+actor+"> has no configured Paddock identity. An operator must add a user mapping or configure the default automation identity before Arnold can act.")
 	}
 	agent := a.Config.AgentName()
 	var previous, target *Binding

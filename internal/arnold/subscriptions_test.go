@@ -1,9 +1,6 @@
 package arnold
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func enableSubscriptions(f *agentFixture, bots bool) {
 	f.a.Config.Channels["C1"] = Route{Repo: "project", AutoSubscribe: true, AutoSubscribeBots: bots}
@@ -104,18 +101,6 @@ func TestChannelSubscriptionKeepsBoundaries(t *testing.T) {
 				t.Fatal("channel subscription boundary changed")
 			}
 		})
-	}
-}
-
-func TestSubscriptionUnknownHumanDoesNotBorrowAutomationIdentity(t *testing.T) {
-	f := newFixture(t)
-	enableSubscriptions(f, true)
-	e := incoming("1")
-	e.Event.Text, e.Event.User = "fix production", "U3"
-	f.receive(e)
-	f.drain()
-	if len(f.p.runs) != 0 || len(f.chat.posts) != 1 || !strings.Contains(f.chat.posts[0], "no configured Paddock identity") {
-		t.Fatal("unmapped human borrowed the automation identity")
 	}
 }
 

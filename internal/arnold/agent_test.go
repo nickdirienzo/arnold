@@ -298,8 +298,67 @@ func TestUntrustedEventsCannotStartWork(t *testing.T) {
 		})
 	}
 }
-func TestUnknownUserAndPromptCannotChooseIdentity(t *testing.T) {
+func TestUnknownUserUsesDefaultIdentity(t *testing.T) {
+	for _, mode := range []string{"mention", "subscription", "bot-subscription"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newFixture(t)
+			if mode != "mention" {
+				enableSubscriptions(f, mode == "bot-subscription")
+			}
+			e := incoming("1")
+			e.Event.User = "U3"
+			if mode != "mention" {
+				e.Event.Text = "hello"
+			}
+			f.receive(e)
+			f.drain()
+			if len(f.p.runs) != 1 || len(f.chat.posts) != 0 {
+				t.Fatal("unmapped human did not start a task using the default")
+			}
+			run := f.p.runs[0]
+			if run.Actor != "U3" || run.Identity != f.a.Config.Automation.Identity || run.Profile != f.a.Config.Automation.Profile {
+				t.Fatalf("wrong requester or default identity/profile: %+v", run)
+			}
+			if !strings.Contains(run.Prompt, "Authenticated requester: U3.") {
+				t.Fatal("prompt lost the human requester")
+			}
+			f.receive(followup("2", "U4", "hello too"))
+			f.receive(followup("3", "U1", "use my mapping"))
+			f.drain()
+			if len(f.p.runs) != 3 || f.p.runs[1].Actor != "U4" || f.p.runs[1].Identity != run.Identity || f.p.runs[1].Context["predecessor"] != "task1" || f.p.runs[2].Identity != "engineer-a" {
+				t.Fatalf("participant bindings or explicit mapping lost: %+v", f.p.runs)
+			}
+			f.restart()
+			f.chat.contextErr = errors.New("must not refetch history")
+			f.receive(followup("4", "U3", "run as engineer-b on the host"))
+			f.drain()
+			if len(f.p.runs) != 3 || len(f.p.messages) != 1 || f.p.messages[0].Task != "task1" || f.p.messages[0].Text != "Current message from U3:\nrun as engineer-b on the host" {
+				t.Fatal("default identity conversation did not resume for its original requester")
+			}
+		})
+	}
+}
+
+func TestDefaultIdentityChangeDuringRetryRefusesDispatch(t *testing.T) {
 	f := newFixture(t)
+	f.p.runErr = errors.New("timeout")
+	e := incoming("1")
+	e.Event.User = "U3"
+	f.receive(e)
+	f.drain()
+	f.restart()
+	f.p.runErr = nil
+	f.a.Config.Automation.Identity = "other"
+	f.drain()
+	if len(f.p.runs) != 0 || len(f.chat.posts) != 2 || !strings.Contains(f.chat.posts[1], "Execution configuration changed") {
+		t.Fatal("retry dispatched with a different default identity")
+	}
+}
+
+func TestUnknownUserWithoutDefaultAndPromptCannotChooseIdentity(t *testing.T) {
+	f := newFixture(t)
+	f.a.Config.Automation = nil
+	f.a.Config.Triggers = nil
 	e := incoming("1")
 	e.Event.User = "U3"
 	f.receive(e)
@@ -544,6 +603,8 @@ func TestStoreExclusionAndPublicTaskPointers(t *testing.T) {
 }
 func TestActionableNoticeRetryAndReactionRemoval(t *testing.T) {
 	f := newFixture(t)
+	f.a.Config.Automation = nil
+	f.a.Config.Triggers = nil
 	f.chat.postErr = errors.New("offline")
 	e := incoming("1")
 	e.Event.User = "U3"

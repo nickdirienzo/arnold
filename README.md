@@ -53,7 +53,7 @@ arnold run --env-file /path/to/.env --config /path/to/config.json --state /path/
 
 Use `arnold --help` for options. `ARNOLD_CONFIG`, `ARNOLD_STATE`, `PADDOCK_BIN` and `PADDOCK_HOME` remain supported. Run one Arnold instance for a state database; the process lease rejects a second instance, including an older Node instance.
 
-Only the configured workspace and channels can dispatch work. Every human participant needs an identity mapping. Edits, deletions, unrelated chatter, duplicate event copies and Arnold's own messages are ignored. Unknown users receive an actionable notice. Missing reaction permission is logged and retried without blocking work.
+Only the configured workspace and channels can dispatch work. Human participants use their `users` mapping when present, otherwise Arnold's `automation` identity and profile serve as the default. The authenticated Slack user remains the requester, with a separate task binding for each participant. If neither a user mapping nor `automation` is configured, Arnold posts an actionable notice. Edits, deletions, unrelated chatter, duplicate event copies and Arnold's own messages are ignored. Missing reaction permission is logged and retried without blocking work.
 
 Set `autoSubscribe: true` on a channel to start a conversation for every new top-level human message, without requiring a mention:
 
