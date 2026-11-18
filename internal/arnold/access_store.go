@@ -277,3 +277,29 @@ func (s *Store) finishAccessAction(id, phase string, result json.RawMessage, mes
 	_, err := s.db.Exec("UPDATE access_actions SET phase=?,result=?,error=? WHERE id=? AND phase!='done'", phase, string(result), message, id)
 	return err
 }
+
+// AccessWatches enrolls tasks only through authored activity handled by Bind.
+// Enabling approval polling must not backfill historical receipt/task bindings.
+func (s *Store) accessWatches() ([]TaskRef, error) {
+	rows, err := s.db.Query("SELECT key,task FROM access_watches ORDER BY rowid")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TaskRef
+	for rows.Next() {
+		var ref TaskRef
+		if err = rows.Scan(&ref.Key, &ref.Task); err != nil {
+			return nil, err
+		}
+		out = append(out, ref)
+	}
+	return out, rows.Err()
+}
+
+// A restart is not fresh conversation activity. Existing cards/actions retain
+// their own recovery state, but historical bindings cannot create new posts.
+func (s *Store) resetAccessWatches() error {
+	_, err := s.db.Exec("DELETE FROM access_watches")
+	return err
+}

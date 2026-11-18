@@ -21,6 +21,9 @@ func Serve(ctx context.Context, c Config, store *Store, p PaddockClient, slack *
 	if auth.TeamID != c.TeamID || auth.UserID == "" || auth.BotID == "" {
 		return fmt.Errorf("Slack token does not match the configured workspace/bot")
 	}
+	if err := store.resetAccessWatches(); err != nil {
+		return err
+	}
 	agent := &Agent{Config: c, Store: store, Paddock: p, Slack: slack, BotUserID: auth.UserID, BotID: auth.BotID, Log: log, accessWake: make(chan struct{}, 1)}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

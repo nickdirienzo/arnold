@@ -88,7 +88,7 @@ Set `accessApprovers` to an explicit list of Slack member IDs to enable access r
 "accessApprovers": ["U0123456789"]
 ```
 
-The default is empty. User mappings, channel membership, automation identities, and being the requester do not confer approval authority. Arnold verifies the clicking user, workspace, originating message, and stored proposal before submitting a durable decision to Paddock. It does not interpret conversational text such as “approved” as an access grant.
+The default is empty. New review discovery starts with fresh authored thread activity after startup; enabling approvals or restarting does not backfill historical threads. Existing cards recover in place, and inspection failures are logged without posting diagnostic messages to Slack. User mappings, channel membership, automation identities, and being the requester do not confer approval authority. Arnold verifies the clicking user, workspace, originating message, and stored proposal before submitting a durable decision to Paddock. It does not interpret conversational text such as “approved” as an access grant.
 
 This requires Paddock's access protocol v1 (`access list`, `show`, `decide`, and `reconcile`) with the `integration_results` feature. Requests remain informational when the installed backend cannot safely support an action. Network approval applies to matching requests in the task's sandbox. Paddock owns enforcement and agent notification, including resuming a saved conversation after idle expiry. Paddock supplies the complete review and recovery outcome; Arnold validates the association and renders them as plain text. An approved request and a delivered notification are reported separately.
 

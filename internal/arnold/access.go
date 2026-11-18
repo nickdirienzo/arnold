@@ -59,7 +59,7 @@ func (a *Agent) PollAccess(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("Paddock access protocol is unavailable")
 	}
-	refs, err := a.Store.Tasks()
+	refs, err := a.Store.accessWatches()
 	if err != nil {
 		return err
 	}
@@ -67,6 +67,26 @@ func (a *Agent) PollAccess(ctx context.Context) error {
 	existing, err := a.Store.accessCards()
 	if err != nil {
 		return err
+	}
+	// Existing visible/in-flight cards remain reconcilable without enrolling
+	// their entire historical thread in discovery of unrelated proposals.
+	watched := map[TaskRef]bool{}
+	for _, ref := range refs {
+		watched[ref] = true
+	}
+	known := map[TaskRef]map[string]bool{}
+	for _, card := range existing {
+		if card.MessageTS == "" && card.Phase != "posting" {
+			continue
+		}
+		ref := TaskRef{Key: card.Key, Task: card.TaskID}
+		if known[ref] == nil {
+			known[ref] = map[string]bool{}
+			if !watched[ref] {
+				refs = append(refs, ref)
+			}
+		}
+		known[ref][card.RequestID+"\x00"+card.Revision] = true
 	}
 	for _, ref := range refs {
 		if ctx.Err() != nil {
@@ -79,6 +99,9 @@ func (a *Agent) PollAccess(ctx context.Context) error {
 		proposals, listErr := client.AccessList(ctx, ref.Task)
 		seen := map[string]bool{}
 		for _, p := range proposals {
+			if !watched[ref] && p.Status == "pending" && !known[ref][p.ID+"\x00"+p.Revision] {
+				continue
+			}
 			if listErr != nil {
 				p.Fresh, p.Actionable, p.CanApprove, p.CanReject = false, false, false, false
 			}
@@ -111,9 +134,6 @@ func (a *Agent) PollAccess(ctx context.Context) error {
 		if listErr != nil {
 			reason = "Current access could not be verified. Approval is disabled until Paddock inspection succeeds."
 			failures = append(failures, listErr)
-			if err := a.accessProtocolNotice(ctx, ref); err != nil {
-				failures = append(failures, err)
-			}
 		}
 		if err := a.Store.invalidateAccessCards(ref, seen, reason); err != nil {
 			failures = append(failures, err)
@@ -123,27 +143,6 @@ func (a *Agent) PollAccess(ctx context.Context) error {
 		failures = append(failures, err)
 	}
 	return errors.Join(failures...)
-}
-
-func (a *Agent) accessProtocolNotice(ctx context.Context, ref TaskRef) error {
-	key := "access-guidance:" + ref.Task
-	seen, err := a.Store.Status(key)
-	if err != nil || seen != "" {
-		return err
-	}
-	task, err := a.Paddock.Show(ctx, ref.Task)
-	if err != nil || !task.Blocked {
-		return err
-	}
-	_, channel, thread, err := splitKey(ref.Key)
-	if err != nil {
-		return err
-	}
-	text := fmt.Sprintf("This task has pending access requests, but Arnold could not verify the Paddock approval protocol. An operator can inspect them with `paddock access pending %s`. Slack approval controls stay disabled until inspection succeeds.", ref.Task)
-	if err = a.Slack.Post(ctx, channel, thread, text, Hash(key)); err != nil {
-		return err
-	}
-	return a.Store.Observed(key, "reported")
 }
 
 func (a *Agent) accessView(c accessCard, action *accessAction) AccessCardView {
@@ -178,6 +177,14 @@ func (a *Agent) accessView(c accessCard, action *accessAction) AccessCardView {
 }
 
 func (a *Agent) renderAccessCards(ctx context.Context, chat accessChat) error {
+	watches, err := a.Store.accessWatches()
+	if err != nil {
+		return err
+	}
+	watched := map[TaskRef]bool{}
+	for _, ref := range watches {
+		watched[ref] = true
+	}
 	cards, err := a.Store.accessCards()
 	if err != nil {
 		return err
@@ -198,6 +205,9 @@ func (a *Agent) renderAccessCards(ctx context.Context, chat accessChat) error {
 		}
 		v := a.accessView(c, action)
 		if c.MessageTS == "" {
+			if c.Phase == "new" && (len(a.Config.AccessApprovers) == 0 || !watched[TaskRef{Key: c.Key, Task: c.TaskID}]) {
+				continue
+			}
 			if !c.Active {
 				continue
 			}
