@@ -47,6 +47,9 @@ func (a *Agent) Receive(body Envelope) (string, error) {
 	key := body.TeamID + ":" + e.Channel + ":" + thread
 	mention := strings.Contains(e.Text, "<@"+a.BotUserID+">")
 	human := e.BotID == "" && e.AppID == "" && e.Subtype != "bot_message" && e.User != ""
+	if human && a.Config.RequireMention && !mention {
+		return "", nil
+	}
 	var trigger *Trigger
 	for _, t := range a.Config.Triggers {
 		if t.Channel == e.Channel && ((t.BotID != "" && t.BotID == e.BotID) || (t.UserID != "" && human && t.UserID == e.User)) && strings.Contains(e.Text, t.Contains) {

@@ -567,7 +567,7 @@ func TestConfiguration(t *testing.T) {
 			case "duplicate":
 				c.Triggers = append(c.Triggers, c.Triggers[0])
 			case "empty":
-				c.Triggers[0].Contains = ""
+				c.Triggers[0].Contains = " "
 			}
 			if c.Validate() == nil {
 				t.Fatal("invalid configuration accepted")

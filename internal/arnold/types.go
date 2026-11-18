@@ -27,11 +27,12 @@ type Trigger struct {
 	Channel  string `json:"channel"`
 	BotID    string `json:"botId,omitempty"`
 	UserID   string `json:"userId,omitempty"`
-	Contains string `json:"contains"`
+	Contains string `json:"contains,omitempty"`
 }
 type Config struct {
 	TeamID          string           `json:"teamId"`
 	DefaultRepo     string           `json:"defaultRepo,omitempty"`
+	RequireMention  bool             `json:"requireMention,omitempty"`
 	Channels        map[string]Route `json:"channels"`
 	Users           map[string]Actor `json:"users"`
 	Automation      *Actor           `json:"automation,omitempty"`
@@ -134,8 +135,8 @@ func (c Config) Validate() error {
 	}
 	seen := map[string]bool{}
 	for _, t := range c.Triggers {
-		if t.ID == "" || seen[t.ID] || c.Channels[t.Channel].Repo == "" || (t.BotID == "") == (t.UserID == "") || strings.TrimSpace(t.Contains) == "" {
-			return fail("triggers need unique IDs, configured channels, one source and nonempty contains")
+		if t.ID == "" || seen[t.ID] || c.Channels[t.Channel].Repo == "" || (t.BotID == "") == (t.UserID == "") || (strings.TrimSpace(t.Contains) == "" && (t.UserID != "" || t.Contains != "")) {
+			return fail("triggers need unique IDs, configured channels and one source; human sources require nonempty contains, bot sources may omit it")
 		}
 		seen[t.ID] = true
 	}

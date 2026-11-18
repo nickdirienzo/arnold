@@ -57,6 +57,8 @@ Only the configured workspace can dispatch work. Set top-level `defaultRepo` to 
 
 Human participants use their `users` mapping when present, otherwise Arnold's `automation` identity and profile serve as the default. The authenticated Slack user remains the requester, with a separate task binding for each participant. If neither a user mapping nor `automation` is configured, Arnold posts an actionable notice. Edits, deletions, unrelated chatter, duplicate event copies and Arnold's own messages are ignored. Missing reaction permission is logged and retried without blocking work.
 
+Set top-level `requireMention: true` to require an @mention on every human message, including replies in active threads. This overrides human automatic subscriptions and human-source triggers. The default is `false` for existing configurations; the example enables it. To respond only to mentions and selected alert bots, also disable `autoSubscribeBots` and configure exact bot-source triggers below.
+
 Set `autoSubscribe: true` on a channel to start a conversation for every new top-level human message, without requiring a mention:
 
 ```json
@@ -98,7 +100,16 @@ Install the updated Slack manifest or enable Interactivity in the Slack app's se
 
 ## Automatic triggers
 
-Set `triggers` to `[]`, leave `autoSubscribeBots` disabled and omit `automation` for a human-only deployment. An automatic trigger requires an explicit channel, exact bot ID or human user ID, a literal text substring, and a designated automation identity. Bots cannot initiate or continue work unless an explicit trigger matches or their channel enables `autoSubscribeBots`.
+Set `triggers` to `[]`, leave `autoSubscribeBots` disabled and omit `automation` for a human-only deployment. An automatic trigger requires an explicit channel, exact bot ID or human user ID, and a designated automation identity. `contains` filters by a literal text substring; omit it for a bot source to accept all posts from that exact bot. Human sources require a nonempty substring. Bots cannot initiate or continue work unless an explicit trigger matches or their channel enables `autoSubscribeBots`.
+
+For webhook and PagerDuty alerts, use their actual Slack bot IDs (not display names), with a separate trigger for each source:
+
+```json
+"triggers": [
+  {"id": "incoming-webhook", "channel": "C0123456789", "botId": "B0123456789"},
+  {"id": "pagerduty", "channel": "C0123456789", "botId": "B9876543210"}
+]
+```
 
 An automatic event starts or continues the same conversation path as a human mention. There are no incident objects, remediation workflows or independent task scheduler. Set `automation.recipientUserId` to a channel member ID for assistant thinking blocks in bot-initiated conversations. Without a human recipient, answers use ordinary replies and diagnostics remain local.
 
