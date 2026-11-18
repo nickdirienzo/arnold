@@ -147,7 +147,7 @@ func (a *Agent) PollAccess(ctx context.Context) error {
 
 func (a *Agent) accessView(c accessCard, action *accessAction) AccessCardView {
 	p := c.Proposal
-	v := AccessCardView{CardID: c.ID, TaskID: c.TaskID, RequestID: c.RequestID, Kind: p.Kind, Summary: p.Summary, Details: p.Details, Status: p.Outcome, Actionable: p.Kind == "network" && c.Active && p.Fresh && p.Actionable && len(a.Config.AccessApprovers) > 0, CanApprove: p.CanApprove, CanReject: p.CanReject}
+	v := AccessCardView{CardID: c.ID, TaskID: c.TaskID, RequestID: c.RequestID, Kind: p.Kind, Summary: p.Summary, Details: p.Details, Status: p.Outcome, Actionable: p.Kind == "network" && c.Active && p.Fresh && p.Actionable && (p.CanApprove || p.CanReject) && len(a.Config.AccessApprovers) > 0, CanApprove: p.CanApprove, CanReject: p.CanReject}
 	if v.Status == "" {
 		v.Status = "Request: " + p.Status
 	}
@@ -205,7 +205,11 @@ func (a *Agent) renderAccessCards(ctx context.Context, chat accessChat) error {
 		}
 		v := a.accessView(c, action)
 		if c.MessageTS == "" {
-			if c.Phase == "new" && (len(a.Config.AccessApprovers) == 0 || !watched[TaskRef{Key: c.Key, Task: c.TaskID}]) {
+			// Keep unavailable proposals in local state so a later qualified
+			// inspection can surface them. Only interrupt the thread when an
+			// operator has a decision to make. In-flight posts must still be
+			// reconciled, and visible cards must still lose stale controls.
+			if c.Phase == "new" && (!v.Actionable || !watched[TaskRef{Key: c.Key, Task: c.TaskID}]) {
 				continue
 			}
 			if !c.Active {

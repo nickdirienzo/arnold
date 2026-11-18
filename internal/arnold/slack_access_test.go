@@ -124,6 +124,68 @@ func TestAccessCardFailsRatherThanHidingScope(t *testing.T) {
 	}
 }
 
+func TestAccessCardReviewLeadsWithStatusAndOmitsOnlyDuplicateMetadata(t *testing.T) {
+	v := accessViewFixture()
+	v.Summary = "Network access requested"
+	rule := "Requested access:\n{\"host\":\"api.github.com\",\"port\":443,\"methods\":[\"GET\"]}"
+	v.Details = []string{
+		"Task: " + v.TaskID,
+		"Request: " + v.RequestID,
+		"Sandbox: pd-example (sandbox-123)",
+		"Purpose: Download dependencies <@U123> & <!channel>",
+		"Scope: this sandbox. This rule may permit later matching requests; it is not a single download.",
+		rule,
+		"Scope: GET requests only; executable /usr/local/bin/gh",
+		"Validation: no new findings",
+		"Evaluated candidate policy: abc123",
+	}
+	blocks, err := accessCardBlocks(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blocks[1]["text"].(map[string]any)["text"] != "Status: "+v.Status {
+		t.Fatal("status was buried below the review")
+	}
+	var texts []string
+	for _, block := range blocks {
+		objects := []map[string]any{}
+		if object, ok := block["text"].(map[string]any); ok {
+			objects = append(objects, object)
+		}
+		if block["type"] == "context" {
+			objects = append(objects, block["elements"].([]map[string]any)...)
+		}
+		for _, object := range objects {
+			if object["type"] != "plain_text" {
+				t.Fatal("review metadata enabled markup")
+			}
+			texts = append(texts, object["text"].(string))
+		}
+	}
+	joined := strings.Join(texts, "\n")
+	for _, once := range []string{v.Summary, "Task: " + v.TaskID, "Request: " + v.RequestID, "Matching requests remain allowed until the rule is removed."} {
+		if strings.Count(joined, once) != 1 {
+			t.Fatalf("expected one copy of %q: %s", once, joined)
+		}
+	}
+	for _, detail := range v.Details[2:] {
+		if strings.HasPrefix(detail, "Scope: this sandbox.") {
+			continue // Replaced by the equivalent sandbox scope statement.
+		}
+		if !strings.Contains(joined, detail) {
+			t.Fatalf("review content was lost: %q", detail)
+		}
+	}
+	footer := blocks[len(blocks)-2] // The action buttons follow the footer.
+	if footer["type"] != "context" || footer["elements"].([]map[string]any)[0]["text"] != "Task: "+v.TaskID+"\nRequest: "+v.RequestID {
+		t.Fatal("task and request identity were not retained in the footer")
+	}
+	args, err := accessCardArgs("C1", v)
+	if err != nil || args["text"] != v.Summary+"\nStatus: "+v.Status {
+		t.Fatal("notification fallback did not describe the request and status", args, err)
+	}
+}
+
 func TestAccessCardControlsRequireQualifiedActions(t *testing.T) {
 	for _, test := range []struct {
 		approve, reject bool

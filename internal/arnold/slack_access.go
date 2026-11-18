@@ -45,16 +45,33 @@ func accessCardBlocks(v AccessCardView) ([]map[string]any, error) {
 	} else if v.Actionable {
 		return nil, fmt.Errorf("unsupported actionable access kind")
 	}
-	texts := []string{v.Summary, "Task: " + v.TaskID + "\nRequest: " + v.RequestID, scope}
+	identity := "Task: " + v.TaskID + "\nRequest: " + v.RequestID
+	texts := []string{v.Summary, identity, scope, "Status: " + v.Status}
 	texts = append(texts, v.Details...)
-	texts = append(texts, "Status: "+v.Status)
-	blocks := []map[string]any{{"type": "header", "block_id": marker, "text": plain(title)}}
 	for _, text := range texts {
 		if !utf8.ValidString(text) || strings.TrimSpace(text) == "" || utf8.RuneCountInString(text) > 3000 {
 			return nil, fmt.Errorf("access card text exceeds Slack limits")
 		}
+	}
+	blocks := []map[string]any{{"type": "header", "block_id": marker, "text": plain(title)}}
+	section := func(text string) {
 		blocks = append(blocks, map[string]any{"type": "section", "text": plain(text)})
 	}
+	if v.Summary != title {
+		section(v.Summary)
+	}
+	section("Status: " + v.Status)
+	section(scope)
+	for _, detail := range v.Details {
+		// Remove only exact duplicates of information already shown. Preserve
+		// every other review field, including the complete requested rule.
+		if detail == "Task: "+v.TaskID || detail == "Request: "+v.RequestID || detail == scope ||
+			(v.Kind == "network" && detail == "Scope: this sandbox. This rule may permit later matching requests; it is not a single download.") {
+			continue
+		}
+		section(detail)
+	}
+	blocks = append(blocks, map[string]any{"type": "context", "elements": []map[string]any{plain(identity)}})
 	if v.Actionable && (v.CanApprove || v.CanReject) {
 		if v.Token == "" || len(v.Token) > 256 || !utf8.ValidString(v.Token) {
 			return nil, fmt.Errorf("invalid access card action token")
@@ -81,7 +98,7 @@ func accessCardArgs(channel string, v AccessCardView) (map[string]any, error) {
 		return nil, err
 	}
 	return map[string]any{
-		"channel": channel, "text": "Access request. Review the details and status in this message.",
+		"channel": channel, "text": v.Summary + "\nStatus: " + v.Status,
 		"blocks": blocks, "mrkdwn": false, "parse": "none", "link_names": false,
 		"unfurl_links": false, "unfurl_media": false,
 	}, nil

@@ -388,6 +388,108 @@ func TestAccessOrchestrationInspectionFailureRemovesControlsWithoutPosting(t *te
 	}
 }
 
+func TestAccessOrchestrationUnavailableRequestsStayQuietUntilActionable(t *testing.T) {
+	f, backend, chat, _, original := accessOrchestrationFixture(t)
+	// Model the burst of unrelated, unapprovable network requests that used
+	// to bury the actual task response in technical diagnostics.
+	backend.proposals = nil
+	for n := 0; n < 4; n++ {
+		p := original
+		p.ID = fmt.Sprintf("unavailable-%d", n)
+		p.Actionable, p.CanApprove, p.CanReject = false, false, false
+		p.Outcome = "Access unavailable: Only exact-host REST endpoints with inspection and enforcement can be approved here."
+		backend.proposals = append(backend.proposals, p)
+	}
+	for n := 0; n < 3; n++ {
+		if err := f.a.PollAccess(testContext); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(chat.posted) != 0 || len(chat.updated) != 0 || chat.finds != 0 || len(f.chat.posts) != 0 {
+		t.Fatal("unavailable requests interrupted the Slack thread")
+	}
+	cards, err := f.a.Store.accessCards()
+	if err != nil || len(cards) != 4 {
+		t.Fatalf("unavailable proposals were not retained: %+v %v", cards, err)
+	}
+	for _, card := range cards {
+		if card.Phase != "new" || card.TokenHash != "" || card.MessageTS != "" || card.Proposal.Outcome != backend.proposals[0].Outcome {
+			t.Fatalf("unavailable proposal lost its diagnostics or started posting: %+v", card)
+		}
+	}
+	// Qualification can change without changing the proposal's revision.
+	backend.proposals[0] = original
+	backend.proposals[0].ID = "unavailable-0"
+	for n := 0; n < 2; n++ {
+		if err := f.a.PollAccess(testContext); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(chat.posted) != 1 || !latestAccessView(t, chat).Actionable || len(backend.decisions) != 0 {
+		t.Fatal("qualified request did not produce exactly one review card")
+	}
+}
+
+func TestAccessOrchestrationFirstPostRequiresQualifiedDecision(t *testing.T) {
+	for name, mutate := range map[string]func(*AccessProposal){
+		"stale":        func(p *AccessProposal) { p.Fresh = false },
+		"unavailable":  func(p *AccessProposal) { p.Actionable = false },
+		"no decisions": func(p *AccessProposal) { p.CanApprove, p.CanReject = false, false },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, backend, chat, _, _ := accessOrchestrationFixture(t)
+			mutate(&backend.proposals[0])
+			if err := f.a.PollAccess(testContext); err != nil {
+				t.Fatal(err)
+			}
+			if len(chat.posted) != 0 || len(chat.updated) != 0 {
+				t.Fatal("unqualified request posted a card")
+			}
+		})
+	}
+}
+
+func TestAccessOrchestrationUnavailableVisibleCardUpdatesInPlace(t *testing.T) {
+	f, backend, chat, _, _ := accessOrchestrationFixture(t)
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	token := latestAccessView(t, chat).Token
+	backend.proposals[0].Actionable = false
+	backend.proposals[0].CanApprove, backend.proposals[0].CanReject = false, false
+	backend.proposals[0].Outcome = "Access unavailable: candidate policy could not be evaluated."
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	v := latestAccessView(t, chat)
+	if len(chat.posted) != 1 || v.Actionable || v.Status != backend.proposals[0].Outcome {
+		t.Fatal("visible card did not lose controls and explain the unavailable outcome")
+	}
+	if err := f.a.ReceiveAccessInteraction(accessClick(token, "approve")); err != nil {
+		t.Fatal(err)
+	}
+	if actions, err := f.a.Store.pendingAccessActions(); err != nil || len(actions) != 0 {
+		t.Fatalf("old controls admitted an unavailable decision: %+v %v", actions, err)
+	}
+}
+
+func TestAccessOrchestrationUnavailableRequestStillReconcilesUncertainPost(t *testing.T) {
+	f, backend, chat, _, _ := accessOrchestrationFixture(t)
+	chat.postErr = errors.New("response lost after posting")
+	if err := f.a.PollAccess(testContext); err == nil {
+		t.Fatal("uncertain post was treated as confirmed")
+	}
+	backend.proposals[0].Actionable = false
+	backend.proposals[0].CanApprove, backend.proposals[0].CanReject = false, false
+	chat.findTS = "101.001"
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.posted) != 1 || chat.finds != 1 || latestAccessView(t, chat).Actionable {
+		t.Fatal("unavailable in-flight post was skipped, reposted, or left actionable")
+	}
+}
+
 func TestAccessOrchestrationAmbiguousPostRecoversWithoutReposting(t *testing.T) {
 	f, backend, chat, _, _ := accessOrchestrationFixture(t)
 	chat.postErr = errors.New("reply lost after Slack accepted the post")
