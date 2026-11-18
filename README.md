@@ -74,11 +74,27 @@ To include every bot-posted alert in that channel, also set `autoSubscribeBots: 
 
 ## Conversation and identity behavior
 
-A new task receives the bounded earlier Slack context so an initial reply such as “investigate this” has a referent. **Resumed tasks receive only the new authored message.** Paddock already retains previous user/assistant messages in its native session; Arnold does not resend them or fetch thread history on normal follow-ups.
+A new task receives the bounded earlier Slack context so an initial reply such as “investigate this” has a referent. **Resumed tasks receive the new authored message**. Paddock owns runtime guidance and freezes its guide pointer into authored OpenShell message deliveries. Paddock already retains previous user/assistant messages in its native session; Arnold does not resend them or fetch thread history on normal follow-ups.
 
 Paddock provenance is immutable. Each participant's identity/profile has a task pointer in the thread. Participants can alternate and resume their respective tasks after a restart. When a new participant or a different agent requires a new task, Arnold includes the predecessor reference and Slack context under the current authenticated identity. An automation task is never reassigned to a human identity.
 
 Human requests and autonomous work can use the same `implementation` profile, allowing investigation, code changes and pull requests. The optional `investigation` profile restricts either kind of work to investigation. Within the configured permissions, the agent decides what to investigate or change. Merging and deployment require human review. Arnold exposes no privileged host tools for model-directed operations.
+
+## Access requests
+
+Set `accessApprovers` to an explicit list of Slack member IDs to enable access request cards in the task's original thread:
+
+```json
+"accessApprovers": ["U0123456789"]
+```
+
+The default is empty. User mappings, channel membership, automation identities, and being the requester do not confer approval authority. Arnold verifies the clicking user, workspace, originating message, and stored proposal before submitting a durable decision to Paddock. It does not interpret conversational text such as “approved” as an access grant.
+
+This requires Paddock's access protocol v1 (`access list`, `show`, `decide`, and `reconcile`) with the `integration_results` feature. Requests remain informational when the installed backend cannot safely support an action. Network approval applies to matching requests in the task's sandbox. Paddock owns enforcement and agent notification, including resuming a saved conversation after idle expiry. Paddock supplies the complete review and recovery outcome; Arnold validates the association and renders them as plain text. An approved request and a delivered notification are reported separately.
+
+Stock OpenShell network requests offer approval only; its rejection API can revoke an already approved rule, so Paddock leaves that action unavailable.
+
+Install the updated Slack manifest or enable Interactivity in the Slack app's settings. Button payloads use the existing Socket Mode connection. Restart Arnold after configuring approvers. The existing `--poll-interval` setting controls conversation polling, access discovery, and recovery; button clicks wake the decision worker immediately. Repository trust and tool configuration remain separate from network approval. Adding approver IDs does not provision credentials or grant access. See [access approvals](docs/access-approvals.md) for the contract, recovery behavior, and backend requirements.
 
 ## Automatic triggers
 

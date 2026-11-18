@@ -30,14 +30,15 @@ type Trigger struct {
 	Contains string `json:"contains"`
 }
 type Config struct {
-	TeamID      string           `json:"teamId"`
-	DefaultRepo string           `json:"defaultRepo,omitempty"`
-	Channels    map[string]Route `json:"channels"`
-	Users       map[string]Actor `json:"users"`
-	Automation  *Actor           `json:"automation,omitempty"`
-	Triggers    []Trigger        `json:"triggers"`
-	Agent       string           `json:"agent,omitempty"`
-	IdleTTL     string           `json:"idleTtl,omitempty"`
+	TeamID          string           `json:"teamId"`
+	DefaultRepo     string           `json:"defaultRepo,omitempty"`
+	Channels        map[string]Route `json:"channels"`
+	Users           map[string]Actor `json:"users"`
+	Automation      *Actor           `json:"automation,omitempty"`
+	Triggers        []Trigger        `json:"triggers"`
+	Agent           string           `json:"agent,omitempty"`
+	IdleTTL         string           `json:"idleTtl,omitempty"`
+	AccessApprovers []string         `json:"accessApprovers,omitempty"`
 }
 
 var channelID = regexp.MustCompile(`^[CG][A-Z0-9]+$`)
@@ -97,6 +98,13 @@ func (c Config) Validate() error {
 	}
 	if _, err := normalizeIdleTTL(c.IdleTTL); err != nil {
 		return fail(err.Error())
+	}
+	approvers := map[string]bool{}
+	for _, id := range c.AccessApprovers {
+		if !userID.MatchString(id) || approvers[id] {
+			return fail("accessApprovers must contain unique Slack member IDs")
+		}
+		approvers[id] = true
 	}
 	if len(c.Triggers) > 0 && c.Automation == nil {
 		return fail("configured triggers require an automation identity")

@@ -1,0 +1,413 @@
+{
+  "list": {
+    "protocol_version": 1,
+    "features": [
+      "task_bound_requests",
+      "immutable_revision",
+      "decision_idempotency",
+      "single_winner",
+      "network_review_token",
+      "notification_receipts",
+      "integration_results"
+    ],
+    "task_id": "0123456789abcdef01234567",
+    "refresh": {
+      "state": "fresh",
+      "checked_at": "2026-11-17T20:00:00Z",
+      "error": null
+    },
+    "advisor": {
+      "state": "available",
+      "error": null
+    },
+    "requests": [
+      {
+        "id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+        "task_id": "0123456789abcdef01234567",
+        "kind": "network",
+        "target": {
+          "sandbox_id": "01abcdef-1234-4321-abcd-0123456789ab",
+          "sandbox_name": "pd-example",
+          "gateway": "example-gateway",
+          "workspace": "default"
+        },
+        "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "pending",
+        "scope": "sandbox",
+        "grant_expires_at": null,
+        "snapshot": {
+          "schema_version": 1,
+          "task_id": "0123456789abcdef01234567",
+          "request_id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+          "kind": "network",
+          "target": {
+            "sandbox_id": "01abcdef-1234-4321-abcd-0123456789ab",
+            "sandbox_name": "pd-example",
+            "gateway": "example-gateway",
+            "workspace": "default"
+          },
+          "rule": {
+            "name": "npm_registry",
+            "endpoints": [
+              {
+                "host": "registry.npmjs.org",
+                "port": 443,
+                "protocol": "rest",
+                "enforcement": 1,
+                "access": 1
+              }
+            ],
+            "binaries": [
+              {
+                "path": "/usr/local/bin/node"
+              }
+            ]
+          },
+          "rationale": "Download the requested npm dependencies.",
+          "security": [],
+          "validation_result": "no new findings",
+          "application_error": "",
+          "current_effective_policy_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "candidate_effective_policy_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "review_token_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "rule_name": "npm_registry"
+        },
+        "supported_decisions": [
+          "approve"
+        ],
+        "decision_semantics": {
+          "approve": "exact_reviewed_rule",
+          "reject": "unavailable"
+        },
+        "actionable": true,
+        "receipt": null,
+        "error": null,
+        "review": {
+          "summary": "Network access requested",
+          "details": [
+            "Task: 0123456789abcdef01234567",
+            "Sandbox: pd-example (01abcdef-1234-4321-abcd-0123456789ab)",
+            "Gateway: example-gateway; workspace: default",
+            "Purpose: Download the requested npm dependencies.",
+            "Rule name: npm_registry",
+            "Scope: this sandbox. This rule may permit later matching requests; it is not a single download.",
+            "Requested access:\n{\n  \"name\": \"npm_registry\",\n  \"endpoints\": [\n    {\n      \"host\": \"registry.npmjs.org\",\n      \"port\": 443,\n      \"protocol\": \"rest\",\n      \"enforcement\": 1,\n      \"access\": 1\n    }\n  ],\n  \"binaries\": [\n    {\n      \"path\": \"/usr/local/bin/node\"\n    }\n  ]\n}",
+            "Validation: no new findings",
+            "Evaluated candidate policy: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          ]
+        },
+        "outcome": {
+          "state": "unresolved",
+          "summary": "Request: pending"
+        }
+      }
+    ],
+    "error": null
+  },
+  "empty_list": {
+    "protocol_version": 1,
+    "features": [
+      "task_bound_requests",
+      "immutable_revision",
+      "decision_idempotency",
+      "single_winner",
+      "network_review_token",
+      "notification_receipts",
+      "integration_results"
+    ],
+    "task_id": "0123456789abcdef01234567",
+    "refresh": {
+      "state": "fresh",
+      "checked_at": "2026-11-17T20:00:00Z",
+      "error": null
+    },
+    "advisor": {
+      "state": "available",
+      "error": null
+    },
+    "requests": [],
+    "error": null
+  },
+  "show": {
+    "protocol_version": 1,
+    "features": [
+      "task_bound_requests",
+      "immutable_revision",
+      "decision_idempotency",
+      "single_winner",
+      "network_review_token",
+      "notification_receipts",
+      "integration_results"
+    ],
+    "task_id": "0123456789abcdef01234567",
+    "refresh": {
+      "state": "fresh",
+      "checked_at": "2026-11-17T20:00:00Z",
+      "error": null
+    },
+    "advisor": {
+      "state": "available",
+      "error": null
+    },
+    "request": {
+      "id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+      "task_id": "0123456789abcdef01234567",
+      "kind": "network",
+      "target": {
+        "sandbox_id": "01abcdef-1234-4321-abcd-0123456789ab",
+        "sandbox_name": "pd-example",
+        "gateway": "example-gateway",
+        "workspace": "default"
+      },
+      "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "pending",
+      "scope": "sandbox",
+      "grant_expires_at": null,
+      "snapshot": {
+        "schema_version": 1,
+        "task_id": "0123456789abcdef01234567",
+        "request_id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+        "kind": "network",
+        "target": {
+          "sandbox_id": "01abcdef-1234-4321-abcd-0123456789ab",
+          "sandbox_name": "pd-example",
+          "gateway": "example-gateway",
+          "workspace": "default"
+        },
+        "rule": {
+          "name": "npm_registry",
+          "endpoints": [
+            {
+              "host": "registry.npmjs.org",
+              "port": 443,
+              "protocol": "rest",
+              "enforcement": 1,
+              "access": 1
+            }
+          ],
+          "binaries": [
+            {
+              "path": "/usr/local/bin/node"
+            }
+          ]
+        },
+        "rationale": "Download the requested npm dependencies.",
+        "security": [],
+        "validation_result": "no new findings",
+        "application_error": "",
+        "current_effective_policy_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "candidate_effective_policy_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "review_token_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "rule_name": "npm_registry"
+      },
+      "supported_decisions": [
+        "approve"
+      ],
+      "decision_semantics": {
+        "approve": "exact_reviewed_rule",
+        "reject": "unavailable"
+      },
+      "actionable": true,
+      "receipt": null,
+      "error": null,
+      "review": {
+        "summary": "Network access requested",
+        "details": [
+          "Task: 0123456789abcdef01234567",
+          "Sandbox: pd-example (01abcdef-1234-4321-abcd-0123456789ab)",
+          "Gateway: example-gateway; workspace: default",
+          "Purpose: Download the requested npm dependencies.",
+          "Rule name: npm_registry",
+          "Scope: this sandbox. This rule may permit later matching requests; it is not a single download.",
+          "Requested access:\n{\n  \"name\": \"npm_registry\",\n  \"endpoints\": [\n    {\n      \"host\": \"registry.npmjs.org\",\n      \"port\": 443,\n      \"protocol\": \"rest\",\n      \"enforcement\": 1,\n      \"access\": 1\n    }\n  ],\n  \"binaries\": [\n    {\n      \"path\": \"/usr/local/bin/node\"\n    }\n  ]\n}",
+          "Validation: no new findings",
+          "Evaluated candidate policy: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        ]
+      },
+      "outcome": {
+        "state": "unresolved",
+        "summary": "Request: pending"
+      }
+    },
+    "error": null
+  },
+  "decision_input": {
+    "protocol_version": 1,
+    "task_id": "0123456789abcdef01234567",
+    "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "decision": "approve",
+    "external_id": "arnold:access:action-123",
+    "actor": {
+      "source": "arnold-slack",
+      "workspace_id": "T0123456789",
+      "user_id": "U0123456789"
+    },
+    "reason": "Required dependency download"
+  },
+  "receipt": {
+    "protocol_version": 1,
+    "id": "a12345678901234567890123",
+    "task_id": "0123456789abcdef01234567",
+    "request_id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+    "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "external_id": "arnold:access:action-123",
+    "decision": {
+      "value": "approve",
+      "caller": "501:arnold-service",
+      "actor": {
+        "source": "arnold-slack",
+        "workspace_id": "T0123456789",
+        "user_id": "U0123456789"
+      },
+      "reason": "Required dependency download",
+      "state": "confirmed",
+      "created_at": "2026-11-17T20:00:00Z",
+      "updated_at": "2026-11-17T20:00:00Z",
+      "error": null
+    },
+    "grant": {
+      "status": "approved",
+      "application_status": "unknown",
+      "policy_version": 12,
+      "policy_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "error": null
+    },
+    "notification": {
+      "status": "pending",
+      "external_id": "access:a12345678901234567890123",
+      "caller_namespace": "paddock:access-notification",
+      "thread_id": "",
+      "retryable": true,
+      "error": {
+        "code": "agent_offline",
+        "message": "Native idle release is being reconciled.",
+        "retryable": true
+      }
+    }
+  },
+  "decision_response": {
+    "protocol_version": 1,
+    "task_id": "0123456789abcdef01234567",
+    "request_id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+    "receipt": {
+      "protocol_version": 1,
+      "id": "a12345678901234567890123",
+      "task_id": "0123456789abcdef01234567",
+      "request_id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+      "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "external_id": "arnold:access:action-123",
+      "decision": {
+        "value": "approve",
+        "caller": "501:arnold-service",
+        "actor": {
+          "source": "arnold-slack",
+          "workspace_id": "T0123456789",
+          "user_id": "U0123456789"
+        },
+        "reason": "Required dependency download",
+        "state": "confirmed",
+        "created_at": "2026-11-17T20:00:00Z",
+        "updated_at": "2026-11-17T20:00:00Z",
+        "error": null
+      },
+      "grant": {
+        "status": "approved",
+        "application_status": "unknown",
+        "policy_version": 12,
+        "policy_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "error": null
+      },
+      "notification": {
+        "status": "pending",
+        "external_id": "access:a12345678901234567890123",
+        "caller_namespace": "paddock:access-notification",
+        "thread_id": "",
+        "retryable": true,
+        "error": {
+          "code": "agent_offline",
+          "message": "Native idle release is being reconciled.",
+          "retryable": true
+        }
+      }
+    },
+    "error": null,
+    "outcome": {
+      "state": "unresolved",
+      "summary": "Decision: approve (confirmed); Access: approved; Policy: unknown; Agent notification: pending; Native idle release is being reconciled."
+    }
+  },
+  "uncertain_response": {
+    "protocol_version": 1,
+    "task_id": "0123456789abcdef01234567",
+    "request_id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+    "receipt": {
+      "protocol_version": 1,
+      "id": "a12345678901234567890123",
+      "task_id": "0123456789abcdef01234567",
+      "request_id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+      "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "external_id": "arnold:access:action-123",
+      "decision": {
+        "value": "approve",
+        "caller": "501:arnold-service",
+        "actor": {
+          "source": "arnold-slack",
+          "workspace_id": "T0123456789",
+          "user_id": "U0123456789"
+        },
+        "reason": "Required dependency download",
+        "state": "uncertain",
+        "created_at": "2026-11-17T20:00:00Z",
+        "updated_at": "2026-11-17T20:00:00Z",
+        "error": {
+          "code": "outcome_uncertain",
+          "message": "Inspect upstream state before any retry.",
+          "retryable": false
+        }
+      },
+      "grant": {
+        "status": "unknown",
+        "application_status": "unknown",
+        "policy_version": 0,
+        "policy_hash": "",
+        "error": {
+          "code": "outcome_uncertain",
+          "message": "Inspect upstream state before any retry.",
+          "retryable": false
+        }
+      },
+      "notification": {
+        "status": "not_requested",
+        "external_id": "",
+        "caller_namespace": "",
+        "thread_id": "",
+        "retryable": false,
+        "error": null
+      }
+    },
+    "error": {
+      "code": "outcome_uncertain",
+      "message": "Inspect upstream state before any retry.",
+      "retryable": false
+    },
+    "outcome": {
+      "state": "unresolved",
+      "summary": "Decision: approve (uncertain); Access: unknown; Policy: unknown; Agent notification: not_requested; Inspect upstream state before any retry.; Inspect upstream state before any retry.; Inspect upstream state before any retry."
+    }
+  },
+  "no_decision_response": {
+    "protocol_version": 1,
+    "task_id": "0123456789abcdef01234567",
+    "request_id": "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec89",
+    "receipt": null,
+    "error": {
+      "code": "no_decision",
+      "message": "No Paddock decision intent exists; resubmit the exact frozen decision input and external ID.",
+      "retryable": true
+    },
+    "outcome": {
+      "state": "not_submitted",
+      "summary": "No Paddock decision intent exists; resubmit the exact frozen decision input and external ID."
+    }
+  }
+}

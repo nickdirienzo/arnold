@@ -65,6 +65,10 @@ func OpenStore(path string) (s *Store, err error) {
  CREATE TABLE IF NOT EXISTS output_receipts (task TEXT,event TEXT,chunk INTEGER,PRIMARY KEY(task,event,chunk));
  CREATE TABLE IF NOT EXISTS slack_streams (task TEXT,turn TEXT,metadata TEXT,PRIMARY KEY(task,turn));
  CREATE TABLE IF NOT EXISTS message_reactions (receipt TEXT PRIMARY KEY,channel TEXT,ts TEXT,task TEXT,after_turn TEXT DEFAULT '',state TEXT DEFAULT 'add');
+ CREATE TABLE IF NOT EXISTS access_cards (id TEXT PRIMARY KEY,key TEXT NOT NULL,task TEXT NOT NULL,request TEXT NOT NULL,revision TEXT NOT NULL,snapshot TEXT NOT NULL,message_ts TEXT NOT NULL DEFAULT '',phase TEXT NOT NULL DEFAULT 'new',token_hash TEXT NOT NULL DEFAULT '',render_hash TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 1);
+ CREATE UNIQUE INDEX IF NOT EXISTS access_card_revision ON access_cards(key,task,request,revision);
+ CREATE INDEX IF NOT EXISTS access_card_token ON access_cards(token_hash);
+ CREATE TABLE IF NOT EXISTS access_actions (id TEXT PRIMARY KEY,card TEXT NOT NULL UNIQUE,task TEXT NOT NULL,request TEXT NOT NULL,payload TEXT NOT NULL,phase TEXT NOT NULL DEFAULT 'pending',result TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT '');
  INSERT OR IGNORE INTO bindings SELECT key,actor,identity,profile,task FROM threads;`)
 	if err != nil {
 		return nil, err
