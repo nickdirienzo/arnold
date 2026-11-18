@@ -27,5 +27,6 @@
     }
   ],
   "agent": "claude",
-  "idleTtl": "30m"
+  "idleTtl": "30m",
+  "accessApprovers": []
 }

@@ -21,6 +21,7 @@ type Agent struct {
 	reactions        map[string]chan struct{}
 	reactionRetry    time.Time
 	reactionWG       sync.WaitGroup
+	accessWake       chan struct{}
 }
 
 type threadContextError struct{ err error }
@@ -301,6 +302,7 @@ func (a *Agent) dispatch(ctx context.Context, row Receipt) (bool, error) {
 			}
 			lines = append(lines, "Earlier Slack messages (bounded context):\n"+contextText)
 		}
+
 		lines = append(lines, "Current message from "+actor+":\n"+e.Text)
 		afterTurn := ""
 		if target != nil {

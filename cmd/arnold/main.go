@@ -53,7 +53,7 @@ func run(args []string, out io.Writer) error {
 	config := flags.String("config", "", "routing configuration (or ARNOLD_CONFIG)")
 	state := flags.String("state", "", "SQLite state path (or ARNOLD_STATE)")
 	binary := flags.String("paddock", "", "Paddock executable (or PADDOCK_BIN)")
-	interval := flags.Duration("poll-interval", 5*time.Second, "output polling interval")
+	interval := flags.Duration("poll-interval", 5*time.Second, "conversation and access polling interval")
 	flags.Usage = func() {
 		fmt.Fprintln(out, "Usage: arnold [run] [options]\n       arnold launchd [options]\n       arnold version\n\nSlack conversations delegated to Paddock/OpenShell.")
 		flags.PrintDefaults()
