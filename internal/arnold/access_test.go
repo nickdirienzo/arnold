@@ -353,7 +353,7 @@ func TestAccessOrchestrationPendingNotificationDoesNotDuplicateDecision(t *testi
 	}
 }
 
-func TestAccessOrchestrationInspectionFailureRemovesControlsAndGuidesOnce(t *testing.T) {
+func TestAccessOrchestrationInspectionFailureRemovesControlsWithoutPosting(t *testing.T) {
 	f, backend, chat, _, _ := accessOrchestrationFixture(t)
 	f.p.tasks["task1"] = Task{ID: "task1", Blocked: true}
 	if err := f.a.PollAccess(testContext); err != nil {
@@ -370,8 +370,8 @@ func TestAccessOrchestrationInspectionFailureRemovesControlsAndGuidesOnce(t *tes
 	if v.Actionable || v.CanApprove || v.CanReject {
 		t.Fatalf("failed inspection left qualified controls: %+v", v)
 	}
-	if len(f.chat.posts) != 1 {
-		t.Fatalf("operator guidance repeated %d times", len(f.chat.posts))
+	if len(f.chat.posts) != 0 {
+		t.Fatalf("inspection diagnostics leaked to Slack: %d", len(f.chat.posts))
 	}
 	if err := f.a.ReceiveAccessInteraction(accessClick(token, "approve")); err != nil {
 		t.Fatal(err)
@@ -650,5 +650,109 @@ func TestAccessOrchestrationUnsupportedStoredRequestCannotBeSubmitted(t *testing
 				t.Fatal("unsupported decision recovery was incorrect", saved, err)
 			}
 		})
+	}
+}
+
+func TestAccessActivationDoesNotBackfillHistoricalThreads(t *testing.T) {
+	f, backend, chat, _, _ := accessOrchestrationFixture(t)
+	// A pre-upgrade binding exists, but no authored input enrolled this task.
+	if _, err := f.a.Store.db.Exec("DELETE FROM access_watches"); err != nil {
+		t.Fatal(err)
+	}
+	backend.listErr = errors.New("backend unavailable")
+	f.p.tasks["task1"] = Task{ID: "task1", Blocked: true}
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.posted) != 0 || len(chat.updated) != 0 || len(f.chat.posts) != 0 {
+		t.Fatal("historical thread was backfilled")
+	}
+}
+
+func TestAccessReconcilesKnownCardsWithoutDiscoveringHistoricalRequests(t *testing.T) {
+	f, backend, chat, _, p := accessOrchestrationFixture(t)
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.a.Store.db.Exec("DELETE FROM access_watches"); err != nil {
+		t.Fatal(err)
+	}
+	next := p
+	next.ID = "4cf929e5-cd07-43c4-a6e4-b0b7efb9ec90"
+	backend.proposals = append(backend.proposals, next)
+	backend.proposals[0].Status = "approved"
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.posted) != 1 {
+		t.Fatal("unrelated historical request posted a new card")
+	}
+	if latestAccessView(t, chat).Actionable {
+		t.Fatal("existing card did not settle")
+	}
+}
+
+func TestAccessRestartDoesNotDiscoverNewReviewsInOldThreads(t *testing.T) {
+	f, backend, chat, _, p := accessOrchestrationFixture(t)
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.a.Store.resetAccessWatches(); err != nil {
+		t.Fatal(err)
+	}
+	changed := p
+	changed.Revision = "new-review"
+	backend.proposals = []AccessProposal{changed}
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.posted) != 1 || latestAccessView(t, chat).Actionable {
+		t.Fatal("restart created a historical review or kept stale controls")
+	}
+}
+
+func TestAccessRestartDoesNotPostUnsentHistoricalCards(t *testing.T) {
+	for _, disabled := range []bool{false, true} {
+		f, _, chat, ref, p := accessOrchestrationFixture(t)
+		if _, err := f.a.Store.saveAccessProposal(ref, p); err != nil {
+			t.Fatal(err)
+		}
+		if disabled {
+			f.a.Config.AccessApprovers = nil
+		} else if err := f.a.Store.resetAccessWatches(); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.a.PollAccess(testContext); err != nil {
+			t.Fatal(err)
+		}
+		if len(chat.posted) != 0 || len(f.chat.posts) != 0 {
+			t.Fatal("old unsent card opened a historical thread")
+		}
+	}
+}
+
+func TestAccessFreshAuthoredActivityEnrollsAfterRestart(t *testing.T) {
+	f, _, chat, ref, _ := accessOrchestrationFixture(t)
+	if err := f.a.Store.resetAccessWatches(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.posted) != 0 {
+		t.Fatal("historical thread posted before activity")
+	}
+	id := Hash("new-authored-access-activity")
+	if ok, err := f.a.Store.Accept(id, ref.Key, Payload{}); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if err := f.a.Store.Bind(Receipt{ID: id, Key: ref.Key}, ref.Task, "U1", "engineer-a", "implementation", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.a.PollAccess(testContext); err != nil {
+		t.Fatal(err)
+	}
+	if len(chat.posted) != 1 || !latestAccessView(t, chat).Actionable {
+		t.Fatal("fresh authored activity did not enroll current review")
 	}
 }
