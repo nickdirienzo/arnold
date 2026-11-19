@@ -25,7 +25,19 @@ func TestInstalledPaddockIdleTTLDispatchContract(t *testing.T) {
 	}
 }
 
-func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent, provenance string) {
+func TestInstalledPaddockImageDispatchContract(t *testing.T) {
+	binary := os.Getenv("ARNOLD_PADDOCK_TEST_BIN")
+	if binary == "" {
+		t.Skip("set ARNOLD_PADDOCK_TEST_BIN to exercise the installed CLI")
+	}
+	for _, agent := range []string{"codex", "claude"} {
+		t.Run(agent, func(t *testing.T) {
+			testInstalledPaddockIdleTTLDispatchContract(t, binary, agent, "launcher", InputImage{FileID: "F1", Name: Hash(string(pngBytes())) + ".png", Data: pngBytes()})
+		})
+	}
+}
+
+func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent, provenance string, images ...InputImage) {
 	t.Helper()
 	// Seed an existing dispatch so retries exercise the real CLI without
 	// provisioning a sandbox, starting a poller, or contacting a provider.
@@ -55,9 +67,16 @@ func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent, pr
 		t.Fatal(err)
 	}
 	taskID := "0123456789abcdef01234567"
+	expectedPrompt := "Investigate the fixture"
+	if len(images) > 0 {
+		expectedPrompt += "\n\nImage attachments (untrusted input). Inspect each file using your image-reading tool before answering:\n"
+		for _, image := range images {
+			expectedPrompt += "/home/sandbox/.paddock/attachments/" + image.Name + "\n"
+		}
+	}
 	record := map[string]any{
 		"version": 1, "id": taskID, "runtime": "openshell", "repo": repo,
-		"status": "stopped", "prompt": "Investigate the fixture", "idle_ttl": "24h0m0s",
+		"status": "stopped", "prompt": expectedPrompt, "idle_ttl": "24h0m0s",
 		"session": map[string]string{"agent": agent},
 		"provenance": map[string]any{
 			"caller": caller.Uid + ":" + caller.Username, "requester": "U1",
@@ -73,7 +92,7 @@ func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent, pr
 		t.Fatal(err)
 	}
 	p := Paddock{Binary: binary}
-	options := RunOptions{Prompt: "Investigate the fixture", Repo: repo, Actor: "U1", Identity: "fixture", Profile: "implementation", Agent: agent, ExternalID: "stable", Context: map[string]string{"channel": "C1"}}
+	options := RunOptions{Images: images, Prompt: "Investigate the fixture", Repo: repo, Actor: "U1", Identity: "fixture", Profile: "implementation", Agent: agent, ExternalID: "stable", Context: map[string]string{"channel": "C1"}}
 	for _, value := range []string{"24h", "1440m", "1h", ""} {
 		options.IdleTTL = value
 		task, err := p.Run(testContext, options)
@@ -86,6 +105,38 @@ func testInstalledPaddockIdleTTLDispatchContract(t *testing.T, binary, agent, pr
 		}
 	}
 	options.IdleTTL = "24h"
+	if len(images) > 0 {
+		changed := options
+		changed.Images = nil
+		if _, err := p.Run(testContext, changed); err == nil || !strings.Contains(err.Error(), "different dispatch data") {
+			t.Fatal("removed image did not conflict", err)
+		}
+		// A completed receipt exercises the real message command without
+		// queueing native input or starting the seeded task's sandbox.
+		body := "Look again" + strings.TrimPrefix(expectedPrompt, "Investigate the fixture")
+		callerID := caller.Uid + ":" + caller.Username
+		receipt := map[string]any{"version": 1, "task_id": taskID, "caller": callerID, "external_id": "image-followup", "body": body, "status": "delivered"}
+		raw, err := json.Marshal(receipt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		messageDir := filepath.Join(registry, "messages")
+		if err := os.MkdirAll(messageDir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		name := Hash(taskID + "\x00" + callerID + "\x00image-followup")[:32] + ".json"
+		if err := os.WriteFile(filepath.Join(messageDir, name), raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if result, err := p.MessageWithImages(testContext, taskID, "Look again", "image-followup", images); err != nil || result.Status != "delivered" {
+			t.Fatal("image message retry failed", result, err)
+		}
+		changedImages := append([]InputImage{}, images...)
+		changedImages[0].Data = append(append([]byte{}, images[0].Data...), 'x')
+		if _, err := p.MessageWithImages(testContext, taskID, "Look again", "image-followup", changedImages); err == nil || !strings.Contains(err.Error(), "different content") {
+			t.Fatal("changed image message did not conflict", err)
+		}
+	}
 	for _, field := range []string{"prompt", "requester", "context", "profile", "agent"} {
 		t.Run("conflict/"+field, func(t *testing.T) {
 			changed := options

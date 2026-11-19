@@ -59,6 +59,7 @@ func OpenStore(path string) (s *Store, err error) {
 	_, err = s.db.Exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
  CREATE TABLE IF NOT EXISTS threads (key TEXT PRIMARY KEY,task TEXT,actor TEXT,identity TEXT,profile TEXT);
  CREATE TABLE IF NOT EXISTS bindings (key TEXT,actor TEXT,identity TEXT,profile TEXT,task TEXT,PRIMARY KEY(key,actor,identity,profile));
+ CREATE TABLE IF NOT EXISTS task_images (task TEXT,file_id TEXT,PRIMARY KEY(task,file_id));
  CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY,key TEXT,payload TEXT,phase TEXT DEFAULT 'pending',task TEXT,notice TEXT);
  CREATE TABLE IF NOT EXISTS observations (task TEXT PRIMARY KEY,status TEXT);
  CREATE TABLE IF NOT EXISTS output_cursors (task TEXT PRIMARY KEY,cursor TEXT NOT NULL);
@@ -179,6 +180,13 @@ func (s *Store) Pending() ([]Receipt, error) { return s.receipts("pending") }
 func (s *Store) Notices() ([]Receipt, error) { return s.receipts("accepted") }
 func (s *Store) Bind(r Receipt, task, actor, identity, profile, afterTurn string) error {
 	return s.tx(func(tx *sql.Tx) error {
+		if r.Payload != nil && r.Payload.Prepared != nil {
+			for _, image := range r.Payload.Prepared.Images {
+				if _, err := tx.Exec("INSERT OR IGNORE INTO task_images VALUES(?,?)", task, image.FileID); err != nil {
+					return err
+				}
+			}
+		}
 		for _, q := range []struct {
 			sql  string
 			args []any
@@ -195,6 +203,12 @@ func (s *Store) Bind(r Receipt, task, actor, identity, profile, afterTurn string
 		}
 		return nil
 	})
+}
+
+func (s *Store) ImageDelivered(task, fileID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM task_images WHERE task=? AND file_id=?)", task, fileID).Scan(&exists)
+	return exists, err
 }
 func (s *Store) Finish(id, notice string) error {
 	_, e := s.db.Exec("UPDATE receipts SET phase='accepted',payload=NULL,notice=? WHERE id=?", notice, id)

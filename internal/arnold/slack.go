@@ -75,7 +75,7 @@ func (s *Slack) api(ctx context.Context, method string, args any, app bool, out 
 		token = s.AppToken
 	}
 	httpMethod, endpoint := http.MethodPost, base+method
-	if method == "conversations.replies" {
+	if method == "conversations.replies" || method == "files.info" {
 		// This read endpoint accepts query parameters, not a JSON body.
 		var params map[string]any
 		if e = json.Unmarshal(b, &params); e != nil {
@@ -253,6 +253,11 @@ func (s *Slack) socketOnce(ctx context.Context, receive func(Envelope) (string, 
 	}
 }
 func (s *Slack) Context(ctx context.Context, channel, ts, exclude string) (string, error) {
+	r, err := s.ContextWithFiles(ctx, channel, ts, exclude)
+	return r.Text, err
+}
+func (s *Slack) ContextWithFiles(ctx context.Context, channel, ts, exclude string) (ThreadContext, error) {
+	result := ThreadContext{}
 	parts := []string{}
 	cursor := ""
 	more := false
@@ -260,10 +265,11 @@ func (s *Slack) Context(ctx context.Context, channel, ts, exclude string) (strin
 	for page := 0; page < 4; page++ {
 		var r struct {
 			Messages []struct {
-				TS    string `json:"ts"`
-				User  string `json:"user"`
-				BotID string `json:"bot_id"`
-				Text  string `json:"text"`
+				TS    string      `json:"ts"`
+				User  string      `json:"user"`
+				BotID string      `json:"bot_id"`
+				Text  string      `json:"text"`
+				Files []SlackFile `json:"files"`
 			} `json:"messages"`
 			Metadata struct {
 				Cursor string `json:"next_cursor"`
@@ -274,10 +280,15 @@ func (s *Slack) Context(ctx context.Context, channel, ts, exclude string) (strin
 			args["cursor"] = cursor
 		}
 		if e := s.API(ctx, "conversations.replies", args, false, &r); e != nil {
-			return "", e
+			return result, e
 		}
 		for _, m := range r.Messages {
 			n, _ := strconv.ParseFloat(m.TS, 64)
+			if m.TS == exclude {
+				// app_mention envelopes may omit files that the matching message
+				// event includes. Recover those attachments without replaying text.
+				result.Files = append(result.Files, m.Files...)
+			}
 			if m.TS == "" || m.TS == exclude || n >= excludeN {
 				continue
 			}
@@ -289,6 +300,7 @@ func (s *Slack) Context(ctx context.Context, channel, ts, exclude string) (strin
 				who = "unknown"
 			}
 			parts = append(parts, fmt.Sprintf("%s [%s]: %s", m.TS, who, m.Text))
+			result.Files = append(result.Files, m.Files...)
 		}
 		cursor = r.Metadata.Cursor
 		more = cursor != ""
@@ -306,7 +318,8 @@ func (s *Slack) Context(ctx context.Context, channel, ts, exclude string) (strin
 	if more {
 		text = "[Context truncated]\n" + text
 	}
-	return text, nil
+	result.Text = text
+	return result, nil
 }
 func (s *Slack) Post(ctx context.Context, channel, ts, text, id string) error {
 	if len(id) < 32 {

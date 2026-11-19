@@ -1,7 +1,7 @@
 {
   "display_information": { "name": "Arnold", "description": "Engineering conversations powered by Paddock" },
   "features": { "bot_user": { "display_name": "Arnold", "always_online": false } },
-  "oauth_config": { "scopes": { "bot": ["app_mentions:read", "chat:write", "channels:history", "groups:history", "reactions:write"] } },
+  "oauth_config": { "scopes": { "bot": ["app_mentions:read", "chat:write", "channels:history", "groups:history", "reactions:write", "files:read"] } },
   "settings": {
     "socket_mode_enabled": true,
     "interactivity": { "is_enabled": true },

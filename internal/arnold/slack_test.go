@@ -33,7 +33,7 @@ func newSlackFixture(t *testing.T) *slackFixture {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var args map[string]any
 		method := strings.TrimPrefix(r.URL.Path, "/")
-		if method == "conversations.replies" {
+		if method == "conversations.replies" || method == "files.info" {
 			if r.Method != http.MethodGet || r.ContentLength > 0 {
 				t.Error("thread history must use GET query parameters, without a JSON body")
 			}

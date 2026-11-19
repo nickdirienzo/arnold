@@ -160,6 +160,13 @@ func (p Paddock) Run(ctx context.Context, o RunOptions) (Task, error) {
 		o.Agent = "codex"
 	}
 	args := []string{"run", "--prompt-file", filepath.Join(dir, "prompt"), "--repo", o.Repo, "--runtime", "openshell", "--agent", o.Agent, "--identity", o.Identity, "--launcher", o.Profile, "--requester", o.Actor, "--requester-source", "arnold-slack", "--external-id", o.ExternalID, "--context-file", filepath.Join(dir, "context"), "--json", "--detach"}
+	if len(o.Images) > 0 {
+		manifest, err := writeImageManifest(dir, o.Images)
+		if err != nil {
+			return t, err
+		}
+		args = append(args, "--images-file", manifest)
+	}
 	if idleTTL != "" {
 		args = append(args, "--idle-ttl", idleTTL)
 	}
@@ -209,8 +216,24 @@ func (p Paddock) Output(ctx context.Context, id, after string) (OutputPage, erro
 	return page, e
 }
 func (p Paddock) Message(ctx context.Context, id, prompt, external string) (MessageReceipt, error) {
+	return p.MessageWithImages(ctx, id, prompt, external, nil)
+}
+func (p Paddock) MessageWithImages(ctx context.Context, id, prompt, external string, images []InputImage) (MessageReceipt, error) {
 	var r MessageReceipt
-	e := p.call(ctx, []string{"message", id, prompt, "--external-id", external, "--json"}, &r, 4<<20)
+	args := []string{"message", id, prompt, "--external-id", external, "--json"}
+	if len(images) > 0 {
+		dir, err := os.MkdirTemp("", "arnold-images-")
+		if err != nil {
+			return r, err
+		}
+		defer os.RemoveAll(dir)
+		manifest, err := writeImageManifest(dir, images)
+		if err != nil {
+			return r, err
+		}
+		args = append(args, "--images-file", manifest)
+	}
+	e := p.call(ctx, args, &r, 4<<20)
 	if e != nil {
 		var ce *commandError
 		if errors.As(e, &ce) && json.Unmarshal(ce.stdout, &r) == nil {
@@ -221,4 +244,22 @@ func (p Paddock) Message(ctx context.Context, id, prompt, external string) (Mess
 		}
 	}
 	return r, e
+}
+
+func writeImageManifest(dir string, images []InputImage) (string, error) {
+	paths := make([]string, 0, len(images))
+	for i, image := range images {
+		// Never use filenames from Slack or a stored payload as host paths.
+		path := filepath.Join(dir, fmt.Sprintf("image-%d", i))
+		if err := os.WriteFile(path, image.Data, 0600); err != nil {
+			return "", err
+		}
+		paths = append(paths, path)
+	}
+	data, err := json.Marshal(paths)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "images.json")
+	return path, os.WriteFile(path, data, 0600)
 }

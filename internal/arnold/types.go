@@ -144,16 +144,17 @@ func (c Config) Validate() error {
 }
 
 type Event struct {
-	Type     string `json:"type"`
-	Channel  string `json:"channel"`
-	TS       string `json:"ts"`
-	ThreadTS string `json:"thread_ts,omitempty"`
-	User     string `json:"user,omitempty"`
-	Text     string `json:"text,omitempty"`
-	BotID    string `json:"bot_id,omitempty"`
-	AppID    string `json:"app_id,omitempty"`
-	Subtype  string `json:"subtype,omitempty"`
-	Hidden   bool   `json:"hidden,omitempty"`
+	Type     string      `json:"type"`
+	Channel  string      `json:"channel"`
+	TS       string      `json:"ts"`
+	ThreadTS string      `json:"thread_ts,omitempty"`
+	User     string      `json:"user,omitempty"`
+	Text     string      `json:"text,omitempty"`
+	BotID    string      `json:"bot_id,omitempty"`
+	AppID    string      `json:"app_id,omitempty"`
+	Subtype  string      `json:"subtype,omitempty"`
+	Hidden   bool        `json:"hidden,omitempty"`
+	Files    []SlackFile `json:"files,omitempty"`
 }
 type Envelope struct {
 	TeamID string `json:"team_id"`
@@ -167,15 +168,16 @@ type Binding struct {
 	Profile  string `json:"profile"`
 }
 type Prepared struct {
-	Prompt    string   `json:"prompt"`
-	Previous  *Binding `json:"previous"`
-	Target    *Binding `json:"target"`
-	Identity  string   `json:"identity"`
-	Profile   string   `json:"profile"`
-	Agent     string   `json:"agent"`
-	AfterTurn string   `json:"afterTurn"`
-	Repo      string   `json:"repo"`
-	IdleTTL   string   `json:"idleTtl,omitempty"`
+	Images    []InputImage `json:"images,omitempty"`
+	Prompt    string       `json:"prompt"`
+	Previous  *Binding     `json:"previous"`
+	Target    *Binding     `json:"target"`
+	Identity  string       `json:"identity"`
+	Profile   string       `json:"profile"`
+	Agent     string       `json:"agent"`
+	AfterTurn string       `json:"afterTurn"`
+	Repo      string       `json:"repo"`
+	IdleTTL   string       `json:"idleTtl,omitempty"`
 }
 type Payload struct {
 	Event    Event     `json:"event"`
@@ -229,9 +231,41 @@ type OutputPage struct {
 	HasMore    bool          `json:"has_more"`
 }
 type RunOptions struct {
+	Images                                                    []InputImage
 	Prompt, Repo, Actor, Identity, Profile, Agent, ExternalID string
 	IdleTTL                                                   string
 	Context                                                   map[string]string
+}
+
+// InputImage bytes are frozen with the pending request and removed on delivery.
+type InputImage struct {
+	FileID string `json:"fileId"`
+	Name   string `json:"name"`
+	Data   []byte `json:"data"`
+}
+
+type SlackFile struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	MIMEType   string `json:"mimetype"`
+	URLPrivate string `json:"url_private,omitempty"`
+	Size       int64  `json:"size,omitempty"`
+	External   bool   `json:"is_external,omitempty"`
+	Mode       string `json:"mode,omitempty"`
+}
+
+type ThreadContext struct {
+	Text  string
+	Files []SlackFile
+}
+
+type ImageChat interface {
+	ContextWithFiles(context.Context, string, string, string) (ThreadContext, error)
+	DownloadImage(context.Context, SlackFile) (InputImage, error)
+}
+
+type ImagePaddock interface {
+	MessageWithImages(context.Context, string, string, string, []InputImage) (MessageReceipt, error)
 }
 type MessageReceipt struct {
 	Status string `json:"status"`

@@ -76,7 +76,7 @@ To include every bot-posted alert in that channel, also set `autoSubscribeBots: 
 
 ## Conversation and identity behavior
 
-A new task receives the bounded earlier Slack context so an initial reply such as “investigate this” has a referent. **Resumed tasks receive the new authored message**. Paddock owns runtime guidance and freezes its guide pointer into authored OpenShell message deliveries. Paddock already retains previous user/assistant messages in its native session; Arnold does not resend them or fetch thread history on normal follow-ups.
+A new task receives the bounded earlier Slack context so an initial reply such as “investigate this” has a referent. **Resumed tasks receive the new authored message and any new thread images**. Arnold refreshes bounded thread history to discover screenshots posted without a mention, but does not resend earlier text or images already delivered to that participant's task. Paddock owns runtime guidance and freezes its guide pointer into authored OpenShell message deliveries. Paddock already retains previous user/assistant messages in its native session.
 
 Paddock provenance is immutable. Each participant's identity/profile has a task pointer in the thread. Participants can alternate and resume their respective tasks after a restart. When a new participant or a different agent requires a new task, Arnold includes the predecessor reference and Slack context under the current authenticated identity. An automation task is never reassigned to a human identity.
 
@@ -121,7 +121,11 @@ Socket Mode envelopes are acknowledged after durable intake. Pending dispatches 
 
 Output is read through `paddock output --limit 20 --json`. Arnold drains pages, reassembles multipart messages and advances cursors only after delivery. A restart resumes saved Slack streams and skips recorded delivery chunks. It surfaces expired cursors or unavailable history rather than resetting and replaying output. Native `turn_finished` events determine when a response ends, independently of process exit. See [output delivery](docs/paddock-output.md) for limits and delivery guarantees.
 
-Temporary downtime can miss Slack events outside Slack's retry window, while accepted conversations remain recoverable. Initial context is text-only, bounded to four API pages and 24,000 UTF-16 code units; truncation is marked. Files and images are not downloaded.
+Temporary downtime can miss Slack events outside Slack's retry window, while accepted conversations remain recoverable. Thread context is bounded to four API pages and 24,000 UTF-16 code units of earlier text; truncation is marked.
+
+Arnold downloads Slack-hosted PNG, JPEG, GIF and WebP images attached to the current message or found in that bounded thread context. Install the manifest's `files:read` scope and use an updated Paddock supporting `--images-file` on `run` and `message`. Up to eight new images totaling 20 MiB are supplied per request. Downloads require HTTPS on `files.slack.com`, never follow redirects, and never expose Slack credentials to Paddock or the sandbox. Remote files and unsupported formats are identified as unavailable in the agent's prompt.
+
+Image bytes are frozen in the pending SQLite payload before dispatch so retries and restarts preserve the exact request. Confirmed delivery removes those bytes and records file IDs per task to prevent repeated delivery. Download or size-limit failures retain the request and post an actionable notice instead of silently dispatching without its images. Paddock supplies private files inside the sandbox and instructs the agent to inspect them; initial task images are also retained privately by Paddock for launch recovery. Existing conversations pick up previously missed screenshots on their next authored request; upgrading does not automatically rerun old work.
 
 ## launchd
 
