@@ -82,6 +82,8 @@ Paddock provenance is immutable. Each participant's identity/profile has a task 
 
 Human requests and autonomous work can use the same `implementation` profile, allowing investigation, code changes and pull requests. The optional `investigation` profile restricts either kind of work to investigation. Within the configured permissions, the agent decides what to investigate or change. Merging and deployment require human review. Arnold exposes no privileged host tools for model-directed operations.
 
+New tasks are instructed to search the target repository's open PRs, including drafts and all authors, before implementing a fix and again immediately before creating a PR. They should inspect likely matches and their diffs, link a PR that already covers the fix in the Slack thread, and report any remaining gaps instead of creating a duplicate. If the search is unavailable, they should report that limitation and defer PR creation. This is agent guidance, not an atomic reservation: simultaneous tasks can still race. Preventing that race requires a shared claim enforced at PR creation. Existing native conversations retain their original instructions; the guidance applies to new tasks after upgrading and restarting Arnold. Frozen pending dispatches keep their original prompts.
+
 ## Access requests
 
 Set `accessApprovers` to an explicit list of Slack member IDs to enable access request cards in the task's original thread:
